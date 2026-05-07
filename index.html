@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Fiscalizações</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+</head>
+
+<body>
+
+<div class="dashboard">
+
+    <!-- =========================
+         CONTAINER PRINCIPAL
+    ========================== -->
+    <div class="container-principal">
+
+        <!-- HEADER -->
+        <header>
+            <h1>Relatório de Fiscalizações</h1>
+        </header>
+
+        <!-- =========================
+             AÇÕES (EXPORT + MÉTRICA + VISÃO)
+        ========================== -->
+        <div class="topo-acoes">
+
+            <button id="btnDownload" class="btn-download">
+                <i class="fa-solid fa-download"></i>
+                Baixar Base
+            </button>
+
+        </div>
+
+        <!-- =========================
+             FILTROS
+        ========================== -->
+        <section class="filtros-container">
+
+            <h2 class="titulo-filtros">Filtros</h2>
+
+            <div class="filtros">
+
+                <div class="filtro-item">
+                    <button id="btnLimpar" class="btn-limpar">
+                        Limpar filtros
+                    </button>
+                </div>
+
+                <div class="filtro-item">
+                    <label for="filtroDistribuidora">Distribuidora</label>
+                    <select id="filtroDistribuidora" multiple></select>
+                </div>
+
+                <div class="filtro-item">
+                    <label for="filtroGrupo">Grupo</label>
+                    <select id="filtroGrupo" multiple></select>
+                </div>
+
+                <div class="filtro-item">
+                    <label for="filtroPenalidade">Tipo de Penalidade</label>
+                    <select id="filtroPenalidade" multiple></select>
+                </div>
+
+                <!-- ANO -->
+                <div class="filtro-item filtro-ano">
+                    <label>Ano</label>
+
+                    <div class="slider-container">
+                        <input type="range" id="sliderAnoInicio">
+                        <input type="range" id="sliderAnoFim">
+                    </div>
+
+                    <div class="slider-label">
+                        <span id="anoInicioLabel"></span>
+                        <span>até</span>
+                        <span id="anoFimLabel"></span>
+                    </div>
+                </div>
+<div class="linha-controles">
+
+    <div class="controle-esquerda">
+
+        <div class="area-metrica">
+            <div class="toggle-metrica">
+                <button id="btnMetricaPenalidade" class="btn-metrica active">
+                    Penalidade
+                </button>
+
+                <button id="btnMetricaMulta" class="btn-metrica">
+                    Multa Pós-Juízo
+                </button>
+            </div>
+        </div>
+
+        <div class="area-botao">
+            <button id="btnVisao" class="btn-visao">
+                <span class="icon">🔄</span>
+                <span class="texto">Grupo</span>
+            </button>
+        </div>
+
+    </div>
+
+</div>
+        </section>
+            </div>
+        </section>
+
+        <!-- =========================
+             CARDS
+        ========================== -->
+    <section class="cards-container">
+
+    <h2 class="titulo-cards">Resumo</h2>
+
+    <div class="cards">
+
+        <div class="card card-blue">
+            <div class="card-icon">📄</div>
+            <div class="card-content">
+                <span class="card-title">Total de Autos</span>
+                <span class="card-value" id="totalAutos">0</span>
+            </div>
+        </div>
+
+        <div class="card card-green">
+            <div class="card-icon">💰</div>
+            <div class="card-content">
+                <span class="card-title" id="tituloPenalidade">Penalidade</span>
+                <span class="card-value" id="totalPenalidade">0</span>
+            </div>
+        </div>
+
+        <div class="card card-purple">
+            <div class="card-icon">🏢</div>
+            <div class="card-content">
+                <span class="card-title">Unidade Consumidora</span>
+                <span class="card-value" id="ncDistribuidora">0</span>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+    <!-- =========================
+         GRÁFICO DESTAQUE
+    ========================== -->
+    <section class="area-topo-graficos">
+        <div class="grafico-container destaque">
+            <canvas id="graficoRazaoUC"></canvas>
+        </div>
+    </section>
+
+    <!-- =========================
+         GRÁFICOS SECUNDÁRIOS
+    ========================== -->
+    <section class="graficos">
+
+        <div class="graficos-grid">
+
+<div class="grafico-container">
+    <div class="scroll-x">
+        <div class="grafico-scroll">
+            <canvas id="graficoDistribuidora"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="grafico-container">
+    <div class="scroll-x">
+        <div class="grafico-scroll">
+            <canvas id="graficoGrupo"></canvas>
+        </div>
+    </div>
+</div>
+
+            <div class="grafico-container">
+            <button 
+                class="btn-grafico" onclick="alternarGraficoTema()"> Alternar
+            </button>
+                <canvas id="graficoTema"></canvas>
+            </div>
+
+            <div class="grafico-container">
+                <canvas id="graficoEstado"></canvas>
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- =========================
+         TABELA
+    ========================== -->
+    <section class="tabela-box">
+
+        <h2>Detalhamento</h2>
+
+        <table id="tabelaDados">
+            <thead>
+                <tr>
+                    <th>Distribuidora</th>
+                    <th>Grupo</th>
+                    <th>Estado</th>
+                    <th>Tema</th>
+                    <th id="colPenalidade">Penalidade</th>
+                    <th>Nº Auto</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+    </section>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
