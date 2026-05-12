@@ -807,6 +807,28 @@ function atualizarGraficoRazaoUC() {
     const canvas = document.getElementById("graficoRazaoUC");
     if (!canvas) return;
 
+    const scroll = canvas.closest(".grafico-scroll");
+
+if (scroll) {
+
+    const larguraPorBarra = 55;
+
+    const larguraCalculada =
+        labels.length * larguraPorBarra;
+
+    const container =
+        canvas.closest(".grafico-container");
+
+    const larguraMinima =
+        container ? container.clientWidth : 0;
+
+    scroll.style.width =
+        Math.max(
+            larguraCalculada,
+            larguraMinima
+        ) + "px";
+}
+
     if (charts["graficoRazaoUC"]) {
     charts["graficoRazaoUC"].data.labels = labels;
     charts["graficoRazaoUC"].data.datasets[0].backgroundColor = corGrafico(labels);
@@ -834,8 +856,10 @@ charts["graficoRazaoUC"].options.plugins.title.text =
                 data: razaoUC,
                 yAxisID: "y",
                 borderRadius: 6,
+                maxBarThickness: 20,
                 barThickness: 18,
                 backgroundColor: corGrafico(labels)
+                
             },
             {
                     type: "line",

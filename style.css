@@ -173,6 +173,17 @@ body {
     flex-wrap: wrap;
 }
 
+.area-topo-graficos .scroll-x {
+    width: 100%;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.area-topo-graficos .grafico-scroll {
+    min-height: 100%;
+}
+
 .linha-controles {
     display: flex;
     align-items: center;
