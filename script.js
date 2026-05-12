@@ -108,10 +108,20 @@ function getChartTitle(titulo) {
     };
 }
 function getValorMetrica(item) {
-    const valor =
-        metricaAtual === "penalidade"
-            ? item.penalidade
-            : item.multa;
+
+    let valor = 0;
+
+    if (metricaAtual === "penalidade") {
+        valor = item.penalidade;
+    }
+
+    else if (metricaAtual === "multa") {
+        valor = item.multa;
+    }
+
+    else if (metricaAtual === "diretoria") {
+        valor = item.multaDiretoria;
+    }
 
     return Number(valor) || 0;
 }
@@ -166,6 +176,11 @@ complete: function (resultado) {
                     item["VlrMultaPosJuizo"] ??
                     0
                 ),
+                multaDiretoria: parseValorMonetario(
+                                    item["VlrMultaAposDiretoria"] ??
+                                    item["VlrMultaAposDiretoria "] ??
+                                    0
+                                ),
                 tipoPenalidade: item["DscTipoPenalidade"]?.trim() || "Sem Tipo",
                 auto: item["NumAutoInfracao"]?.trim() || ""
                 
@@ -343,8 +358,18 @@ function atualizarCards() {
     document.getElementById("ncDistribuidora").textContent =
         nc.toLocaleString("pt-BR");
 
-    document.getElementById("tituloPenalidade").textContent =
-        usarMulta ? "Multa Pós-Juízo" : "Penalidade";
+    let tituloAtual = "Penalidade";
+
+if (metricaAtual === "multa") {
+    tituloAtual = "Multa Pós-Juízo";
+}
+
+if (metricaAtual === "diretoria") {
+    tituloAtual = "Multa Pós-Diretoria";
+}
+
+document.getElementById("tituloPenalidade").textContent =
+    tituloAtual;
 }
 // =========================
 // FUNÇÃO AUXILIAR AGRUPAR
@@ -465,15 +490,20 @@ if (scroll) {
     responsive: true,
     maintainAspectRatio: false,
     resizeDelay: 200,
-   onClick: (evt, elements, chart) => {
+onClick: (evt, elements) => {
+
+    const chart = charts[id];
+    if (!chart) return;
+
     const points = chart.getElementsAtEventForMode(
         evt,
         'nearest',
-    { intersect: true },
+        { intersect: true },
         true
     );
 
-   if (!points.length) return;
+    if (!points.length) return;
+
     const index = points[0].index;
     const valor = chart.data.labels[index];
 
@@ -532,28 +562,39 @@ if (scroll) {
 // GRÁFICOS PRINCIPAIS
 // =========================
 function atualizarGraficos() {
-    const campo = visaoAtual === "grupo" ? "grupo" : "distribuidora";
+
+    const campo =
+        visaoAtual === "grupo"
+            ? "grupo"
+            : "distribuidora";
 
     const base = dadosFiltrados.filter(isRegistroValido);
-
-const grafPenalidade = Object.entries(
-    agrupar(base, campo, true)
-);
+    const grafPenalidade = Object.entries(
+        agrupar(base, campo, true)
+    );
     const grafAutos = Object.entries(
-    agrupar(
-        dadosFiltrados.filter(item => item.auto),
-        campo
-    )
-)
+        agrupar(
+            dadosFiltrados.filter(item => item.auto),
+            campo
+        )
+    );
 
-criarGrafico(
-    "graficoDistribuidora",
-    metricaAtual === "penalidade"
-        ? "Penalidade"
-        : "Multa Pós-Juízo",
-    grafPenalidade.map(x => x[0]),
-    grafPenalidade.map(x => x[1])
-);
+    let tituloGrafico = "Penalidade";
+
+    if (metricaAtual === "multa") {
+        tituloGrafico = "Multa Pós-Juízo";
+    }
+
+    if (metricaAtual === "diretoria") {
+        tituloGrafico = "Multa Pós-Diretoria";
+    }
+
+    criarGrafico(
+        "graficoDistribuidora",
+        tituloGrafico,
+        grafPenalidade.map(x => x[0]),
+        grafPenalidade.map(x => x[1])
+    );
 
     criarGrafico(
         "graficoGrupo",
@@ -977,10 +1018,7 @@ function atualizarTabela() {
             <td>${item.grupo}</td>
             <td>${item.estado}</td>
             <td>${item.tema}</td>
-            <td>${formatarMoeda(
-                    metricaAtual === "penalidade"
-                ? item.penalidade
-                  : item.multa)}</td>
+            <td>${formatarMoeda(getValorMetrica(item))}</td>
             <td>${item.auto}</td>
         </tr>
     `;
@@ -1127,35 +1165,52 @@ function limparFiltroGrafico() {
 }
 
 function alternarMetrica(tipo) {
+
     metricaAtual = tipo;
 
     const col = document.getElementById("colPenalidade");
+
     if (col) {
-        col.textContent =
-            tipo === "penalidade"
-                ? "Penalidade"
-                : "Multa Pós-Juízo";
+
+        if (tipo === "penalidade") {
+            col.textContent = "Penalidade";
+        }
+
+        else if (tipo === "multa") {
+            col.textContent = "Multa Pós-Juízo";
+        }
+
+        else {
+            col.textContent = "Multa Pós-Diretoria";
+        }
     }
 
     const btnPen = document.getElementById("btnMetricaPenalidade");
     const btnMulta = document.getElementById("btnMetricaMulta");
+    const btnDiretoria = document.getElementById("btnMetricaDiretoria");
 
-    if (btnPen && btnMulta) {
-        btnPen.classList.remove("active");
-        btnMulta.classList.remove("active");
+    [btnPen, btnMulta, btnDiretoria].forEach(btn => {
+        if (btn) btn.classList.remove("active");
+    });
 
-        if (tipo === "penalidade") {
-            btnPen.classList.add("active");
-        } else {
-            btnMulta.classList.add("active");
-        }
+    if (tipo === "penalidade") {
+        btnPen?.classList.add("active");
     }
-Object.keys(charts).forEach(id => {
-    charts[id].destroy();
-    delete charts[id];
-});
 
-aplicarFiltros();
+    else if (tipo === "multa") {
+        btnMulta?.classList.add("active");
+    }
+
+    else {
+        btnDiretoria?.classList.add("active");
+    }
+
+    Object.keys(charts).forEach(id => {
+        charts[id].destroy();
+        delete charts[id];
+    });
+
+    aplicarFiltros();
 }
 let choicesInstances = {};
 
@@ -1191,6 +1246,7 @@ if (btnTema) {
 }
     const btnPen = document.getElementById("btnMetricaPenalidade");
     const btnMulta = document.getElementById("btnMetricaMulta");
+    const btnDiretoria = document.getElementById("btnMetricaDiretoria");
     const btnLimpar = document.getElementById("btnLimpar");
 
     console.log("BTN PEN:", btnPen);
@@ -1209,6 +1265,13 @@ if (btnTema) {
             alternarMetrica("multa");
         };
     }
+
+    if (btnDiretoria) {
+    btnDiretoria.onclick = () => {
+        console.log("clicou diretoria");
+        alternarMetrica("diretoria");
+    };
+}
 
     if (btnLimpar) {
         btnLimpar.onclick = limparFiltroGrafico;

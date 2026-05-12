@@ -23,132 +23,160 @@
     ========================== -->
     <div class="container-principal">
 
-        <!-- HEADER -->
-        <header>
-            <h1>Relatório de Fiscalizações</h1>
-        </header>
+   <header class="header-dashboard">
 
-        <!-- =========================
-             AÇÕES (EXPORT + MÉTRICA + VISÃO)
-        ========================== -->
-        <div class="topo-acoes">
+    <div class="header-info">
 
-            <button id="btnDownload" class="btn-download">
-                <i class="fa-solid fa-download"></i>
-                Baixar Base
-            </button>
-
+        <div class="header-badge">
+            Fiscalizações ANEEL
         </div>
 
-        <!-- =========================
-             FILTROS
-        ========================== -->
-        <section class="filtros-container">
+        <h1>
+            Relatório de Fiscalizações
+        </h1>
 
-            <h2 class="titulo-filtros">Filtros</h2>
-
-            <div class="filtros">
-
-                <div class="filtro-item">
-                    <button id="btnLimpar" class="btn-limpar">
-                        Limpar filtros
-                    </button>
-                </div>
-
-                <div class="filtro-item">
-                    <label for="filtroDistribuidora">Distribuidora</label>
-                    <select id="filtroDistribuidora" multiple></select>
-                </div>
-
-                <div class="filtro-item">
-                    <label for="filtroGrupo">Grupo</label>
-                    <select id="filtroGrupo" multiple></select>
-                </div>
-
-                <div class="filtro-item">
-                    <label for="filtroPenalidade">Tipo de Penalidade</label>
-                    <select id="filtroPenalidade" multiple></select>
-                </div>
-
-                <!-- ANO -->
-                <div class="filtro-item filtro-ano">
-                    <label>Ano</label>
-
-                    <div class="slider-container">
-                        <input type="range" id="sliderAnoInicio">
-                        <input type="range" id="sliderAnoFim">
-                    </div>
-
-                    <div class="slider-label">
-                        <span id="anoInicioLabel"></span>
-                        <span>até</span>
-                        <span id="anoFimLabel"></span>
-                    </div>
-                </div>
-<div class="linha-controles">
-
-    <div class="controle-esquerda">
-
-        <div class="area-metrica">
-            <div class="toggle-metrica">
-                <button id="btnMetricaPenalidade" class="btn-metrica active">
-                    Penalidade
-                </button>
-
-                <button id="btnMetricaMulta" class="btn-metrica">
-                    Multa Pós-Juízo
-                </button>
-            </div>
-        </div>
-
-        <div class="area-botao">
-            <button id="btnVisao" class="btn-visao">
-                <span class="icon">🔄</span>
-                <span class="texto">Grupo</span>
-            </button>
-        </div>
+        <p>
+            Monitoramento de penalidades, multas e desempenho regulatório das distribuidoras.
+        </p>
 
     </div>
 
-</div>
-        </section>
-            </div>
-        </section>
+    <div class="header-actions">
 
-        <!-- =========================
-             CARDS
-        ========================== -->
+        <button id="btnDownload" class="btn-download">
+            <i class="fa-solid fa-download"></i>
+            Exportar Base
+        </button>
+
+    </div>
+
+</header>
+
+<!-- =========================
+     PAINEL DE CONTROLE
+========================== -->
+<section class="painel-controle">
+
+    <!-- =========================
+         FILTROS
+    ========================== -->
+    <section class="filtros-container">
+
+        <h2 class="titulo-filtros">Filtros</h2>
+
+        <div class="filtros">
+
+            <div class="filtro-item">
+                <label for="filtroDistribuidora">Distribuidora</label>
+                <select id="filtroDistribuidora" multiple></select>
+            </div>
+
+            <div class="filtro-item">
+                <label for="filtroGrupo">Grupo</label>
+                <select id="filtroGrupo" multiple></select>
+            </div>
+
+            <div class="filtro-item">
+                <label for="filtroPenalidade">Tipo de Penalidade</label>
+                <select id="filtroPenalidade" multiple></select>
+            </div>
+
+            <div class="filtro-item filtro-ano">
+                <label>Ano</label>
+
+                <div class="slider-container">
+                    <input type="range" id="sliderAnoInicio">
+                    <input type="range" id="sliderAnoFim">
+                </div>
+
+                <div class="slider-label">
+                    <span id="anoInicioLabel"></span>
+                    <span>até</span>
+                    <span id="anoFimLabel"></span>
+                </div>
+            </div>
+
+            <div class="linha-controles">
+
+                <div class="controle-esquerda">
+
+                    <div class="area-metrica">
+                        <div class="toggle-metrica">
+
+                            <button id="btnMetricaPenalidade" class="btn-metrica active">
+                                Penalidade
+                            </button>
+
+                            <button id="btnMetricaMulta" class="btn-metrica">
+                                Multa Pós-Juízo
+                            </button>
+
+                            <button id="btnMetricaDiretoria" class="btn-metrica">
+                                Multa Pós-Diretoria
+                            </button>
+
+                        </div>
+                    </div>
+
+                    <div class="area-botao">
+
+                        <button id="btnVisao" class="btn-visao">
+                            <span class="icon">🔄</span>
+                            <span class="texto">Grupo</span>
+                        </button>
+
+                        <button id="btnLimpar" class="btn-limpar">
+                            <i class="fa-solid fa-filter-circle-xmark"></i>
+                            <span>Limpar Filtros</span>
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <!-- =========================
+         CARDS
+    ========================== -->
     <section class="cards-container">
 
-    <h2 class="titulo-cards">Resumo</h2>
+        <h2 class="titulo-cards">Resumo</h2>
 
-    <div class="cards">
+        <div class="cards">
 
-        <div class="card card-blue">
-            <div class="card-icon">📄</div>
-            <div class="card-content">
-                <span class="card-title">Total de Autos</span>
-                <span class="card-value" id="totalAutos">0</span>
+            <div class="card card-blue">
+                <div class="card-icon">📄</div>
+                <div class="card-content">
+                    <span class="card-title">Total de Autos</span>
+                    <span class="card-value" id="totalAutos">0</span>
+                </div>
             </div>
+
+            <div class="card card-green">
+                <div class="card-icon">💰</div>
+                <div class="card-content">
+                    <span class="card-title" id="tituloPenalidade">Penalidade</span>
+                    <span class="card-value" id="totalPenalidade">0</span>
+                </div>
+            </div>
+
+            <div class="card card-purple">
+                <div class="card-icon">🏢</div>
+                <div class="card-content">
+                    <span class="card-title">Unidade Consumidora</span>
+                    <span class="card-value" id="ncDistribuidora">0</span>
+                </div>
+            </div>
+
         </div>
 
-        <div class="card card-green">
-            <div class="card-icon">💰</div>
-            <div class="card-content">
-                <span class="card-title" id="tituloPenalidade">Penalidade</span>
-                <span class="card-value" id="totalPenalidade">0</span>
-            </div>
-        </div>
+    </section>
 
-        <div class="card card-purple">
-            <div class="card-icon">🏢</div>
-            <div class="card-content">
-                <span class="card-title">Unidade Consumidora</span>
-                <span class="card-value" id="ncDistribuidora">0</span>
-            </div>
-        </div>
-
-    </div>
 </section>
 
     <!-- =========================
