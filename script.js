@@ -109,7 +109,7 @@ function getChartTitle(titulo) {
 }
 function getValorMetrica(item) {
 
-    let valor = 0;
+    let valor = null;
 
     if (metricaAtual === "penalidade") {
         valor = item.penalidade;
@@ -123,21 +123,22 @@ function getValorMetrica(item) {
         valor = item.multaDiretoria;
     }
 
-    return Number(valor) || 0;
+    return (valor === null || valor === undefined) ? 0 : (Number(valor) || 0);
 }
 
 function isRegistroValido(item) {
     // precisa ter auto
     if (!item.auto || item.auto.trim() === "") return false;
 
-    const valor = getValorMetrica(item);
-
-    // 🔴 REGRA PRINCIPAL:
+    // Penalidade: conta todos os autos das distribuidoras (já filtradas no carregamento)
     if (metricaAtual === "penalidade") {
-        return !isNaN(valor); // aceita 0
-    } else {
-        return valor > 0; // multa não aceita vazio/0
+        return true;
     }
+    // Multa/Diretoria: só conta se o campo existe e é > 0
+    if (metricaAtual === "multa") {
+        return item.multa !== null && item.multa > 0;
+    }
+    return item.multaDiretoria !== null && item.multaDiretoria > 0;
 }
 // =========================
 // CARREGAR CSV
@@ -168,19 +169,15 @@ complete: function (resultado) {
                 tema: item["Resumo temas"]?.trim() || "Sem Tema",
                 ano: Number(item["AnoLavratura"]) || null,
                 mercado: parseValorMonetario(item["VlrMercado"]),
-                penalidade: parseValorMonetario(item["VlrPenalidade"]),
-              multa: parseValorMonetario(
-                    item["VlrMultaAposJuizo"] ??
-                    item["VlrMultaAposJuizo "] ??
-                    item["VlrMultaApósJuízo"] ??
-                    item["VlrMultaPosJuizo"] ??
-                    0
-                ),
-                multaDiretoria: parseValorMonetario(
-                                    item["VlrMultaAposDiretoria"] ??
-                                    item["VlrMultaAposDiretoria "] ??
-                                    0
-                                ),
+                penalidade: (item["VlrPenalidade"] === undefined || item["VlrPenalidade"] === null || item["VlrPenalidade"].toString().trim() === "") ? null : parseValorMonetario(item["VlrPenalidade"]),
+              multa: (() => {
+                    const v = item["VlrMultaAposJuizo"] ?? item["VlrMultaAposJuizo "] ?? item["VlrMultaApósJuízo"] ?? item["VlrMultaPosJuizo"] ?? null;
+                    return (v === null || v === undefined || v.toString().trim() === "") ? null : parseValorMonetario(v);
+                })(),
+                multaDiretoria: (() => {
+                                    const v = item["VlrMultaAposDiretoria"] ?? item["VlrMultaAposDiretoria "] ?? null;
+                                    return (v === null || v === undefined || v.toString().trim() === "") ? null : parseValorMonetario(v);
+                                })(),
                 tipoPenalidade: item["DscTipoPenalidade"]?.trim() || "Sem Tipo",
                 auto: item["NumAutoInfracao"]?.trim() || ""
                 
@@ -461,16 +458,9 @@ if (scroll) {
 }
 
     if (charts[id]) {
-    charts[id].data.labels = labels;
-    charts[id].data.datasets[0].data = valores;
-    charts[id].data.datasets[0].label = titulo;
-
-    charts[id].data.datasets[0].backgroundColor = corGrafico(labels);
-
-    charts[id].update('none');
-    return;
+        charts[id].destroy();
+        delete charts[id];
     }
-    setTimeout(() => {
     charts[id] = new Chart(canvas, {
         type: "bar",
         data: {
@@ -528,11 +518,26 @@ onClick: (evt, elements) => {
             weight: "bold",
             size: 11
         },
-      formatter: (value, context) => {
-            const index = context.dataIndex;
-            return (index + 1) + "°";
+        formatter: (value, context) => {
+
+    const ranking = (context.dataIndex + 1) + "°";
+    return ranking;
+}
+    },
+   tooltip: {
+    callbacks: {
+        label: function(context) {
+
+            const value = context.parsed.y;
+            if (
+                id === "graficoDistribuidora"
+            ) {
+                return " Valor: " + formatarMoeda(value);
+            }
+            return " Quantidade: " + value.toLocaleString("pt-BR");
         }
     }
+}
 },
     scales: {
     x: {
@@ -554,8 +559,9 @@ onClick: (evt, elements) => {
   
 }
     });
-   charts[id].resize();
-   });
+    requestAnimationFrame(() => {
+        if (charts[id]) charts[id].resize();
+    });
 }
 
 // =========================
@@ -574,7 +580,7 @@ function atualizarGraficos() {
     );
     const grafAutos = Object.entries(
         agrupar(
-            dadosFiltrados.filter(item => item.auto),
+            dadosFiltrados.filter(isRegistroValido),
             campo
         )
     );
@@ -668,23 +674,34 @@ function atualizarGraficoTema() {
     }
 
     if (charts["graficoTema"]) {
-        charts["graficoTema"].data.labels = labels;
-        charts["graficoTema"].data.datasets = datasets;
-
-        charts["graficoTema"].options.scales = {
-            x: { stacked: modoGraficoTema === "temaAno" },
-            y: { stacked: modoGraficoTema === "temaAno", beginAtZero: true }
-        };
-
-        charts["graficoTema"].update('none');
-        return;
+        charts["graficoTema"].destroy();
+        delete charts["graficoTema"];
     }
 
-    // CREATE
-   charts["graficoTema"] = new Chart(canvas, {
+    // Modo tema: horizontal para caber os nomes longos no eixo Y
+    const isTema = modoGraficoTema === "tema";
+    const isEmpilhado = modoGraficoTema === "temaAno";
+
+    // Ajusta scroll vertical do wrapper interno para o modo tema horizontal
+    const containerTema = canvas.closest(".grafico-container");
+    const scrollTema = canvas.closest(".grafico-scroll-y");
+    if (containerTema) {
+        containerTema.style.height = ""; // sempre mantém altura padrão do CSS
+    }
+    if (scrollTema) {
+        if (isTema) {
+            const alturaInterna = Math.max(360, labels.length * 34 + 80);
+            scrollTema.style.height = alturaInterna + "px";
+        } else {
+            scrollTema.style.height = "100%";
+        }
+    }
+
+    charts["graficoTema"] = new Chart(canvas, {
     type: "bar",
     data: { labels, datasets },
     options: {
+        indexAxis: isTema ? "y" : "x",
         responsive: true,
         maintainAspectRatio: false,
 
@@ -699,55 +716,83 @@ function atualizarGraficoTema() {
             if (!points.length) return;
 
             const index = points[0].index;
-
             let valor;
 
             if (modoGraficoTema === "tema") {
                 valor = chart.data.labels[index];
-            } 
-            else if (modoGraficoTema === "ano") {
+            } else if (modoGraficoTema === "ano") {
                 valor = chart.data.labels[index];
-            } 
-            else {
-                // 🔥 empilhado → pega o tema (dataset)
+            } else {
                 const datasetIndex = points[0].datasetIndex;
                 valor = chart.data.datasets[datasetIndex].label;
             }
 
-        let campo = modoGraficoTema === "ano" ? "ano" : "tema";
+            let campo = modoGraficoTema === "ano" ? "ano" : "tema";
 
-        if (
-    filtroGrafico.campo === campo &&
-    filtroGrafico.valores?.includes(valor)
-) {
-    // remove filtro
-    filtroGrafico = { campo: null, valores: [] };
-
-} else {
-
-    // aplica filtro
-    filtroGrafico = {
-        campo,
-        valores: [valor]
-    };
-}
-aplicarFiltros();
+            if (filtroGrafico.campo === campo && filtroGrafico.valores?.includes(valor)) {
+                filtroGrafico = { campo: null, valores: [] };
+            } else {
+                filtroGrafico = { campo, valores: [valor] };
+            }
+            aplicarFiltros();
         },
 
-       plugins: {
+        plugins: {
             title: tituloPadrao(
-                modoGraficoTema === "tema"
+                isTema
                     ? "Fiscalizações por Tema"
                     : modoGraficoTema === "ano"
                         ? "Fiscalizações por Ano"
                         : "Tema por Ano"
             ),
-            legend: { position: "left" }
+            legend: { display: !isTema, position: "left" },
+            datalabels: {
+                display: isTema,
+                anchor: "end",
+                align: "end",
+                color: "#334155",
+                font: { weight: "bold", size: 11 },
+                formatter: v => v.toLocaleString("pt-BR")
+            }
         },
 
-        scales: {
-            x: { stacked: modoGraficoTema === "temaAno" },
-            y: { stacked: modoGraficoTema === "temaAno", beginAtZero: true }
+        scales: isTema ? {
+            // Horizontal: Y = categorias (temas), X = valores
+            y: {
+                ticks: {
+                    font: { size: 12 },
+                    color: "#334155",
+                    autoSkip: false,
+                    crossAlign: "far",
+                    callback: function(value) {
+                        const label = this.getLabelForValue(value);
+                        // quebra em múltiplas linhas a cada 35 chars
+                        const max = 35;
+                        if (label.length <= max) return label;
+                        const words = label.split(" ");
+                        const lines = [];
+                        let line = "";
+                        words.forEach(word => {
+                            if ((line + " " + word).trim().length > max) {
+                                lines.push(line.trim());
+                                line = word;
+                            } else {
+                                line = (line + " " + word).trim();
+                            }
+                        });
+                        if (line) lines.push(line.trim());
+                        return lines;
+                    }
+                },
+                grid: { display: false }
+            },
+            x: {
+                beginAtZero: true,
+                ticks: { color: "#94a3b8", font: { size: 11 } }
+            }
+        } : {
+            x: { stacked: isEmpilhado },
+            y: { stacked: isEmpilhado, beginAtZero: true }
         }
     }
 });
@@ -830,48 +875,39 @@ if (scroll) {
 }
 
     if (charts["graficoRazaoUC"]) {
-    charts["graficoRazaoUC"].data.labels = labels;
-    charts["graficoRazaoUC"].data.datasets[0].backgroundColor = corGrafico(labels);
-    charts["graficoRazaoUC"].data.datasets[1].data = qtdAutos;
-    charts["graficoRazaoUC"].data.datasets[0].label =
-    metricaAtual === "penalidade"
-        ? "Razão UC"
-        : "Razão UC";
-
-charts["graficoRazaoUC"].options.plugins.title.text =
-    metricaAtual === "penalidade"
-        ? "Penalidade Normalizada"
-        : "Multa Normalizada";
-    charts["graficoRazaoUC"].update('none');
-    return;
-}
+        charts["graficoRazaoUC"].destroy();
+        delete charts["graficoRazaoUC"];
+    }
 
    charts["graficoRazaoUC"] = new Chart(canvas, {
+    plugins: [ChartDataLabels],
     data: {
         labels: labels,
         datasets: [
             {
                 type: "bar",
                 label: "Razão UC",
+                order: 2,
                 data: razaoUC,
                 yAxisID: "y",
                 borderRadius: 6,
                 maxBarThickness: 20,
                 barThickness: 18,
                 backgroundColor: corGrafico(labels)
-                
             },
             {
-                    type: "line",
-                    label: "Qtd Autos",
-                    data: qtdAutos,
-                    yAxisID: "y1",
-                    tension: 0.35,
-                    pointRadius: 4,
-                    borderColor: "#ef4444",      // cor da linha
-                    backgroundColor: "#ef4444",  // cor dos pontos
-                    pointBackgroundColor: "#ef4444"
-}
+                type: "line",
+                label: "Qtd Autos",
+                order: 1,
+                data: qtdAutos,
+                yAxisID: "y1",
+                tension: 0.35,
+                pointRadius: 4,
+                borderColor: "#ef4444",
+                backgroundColor: "#ef4444",
+                pointBackgroundColor: "#ef4444",
+                datalabels: { display: false }
+            }
         ]
     },
     options: {
@@ -908,7 +944,37 @@ charts["graficoRazaoUC"].options.plugins.title.text =
             },
             legend: {
                 position: "top"
+            },
+            datalabels: {
+                anchor: "end",
+                align: "end",
+                color: "#334155",
+                font: {
+                    weight: "bold",
+                    size: 11
+                },
+              formatter: (value, context) => {
+
+    if (context.datasetIndex !== 0) return null;
+    return (context.dataIndex + 1) + "°";
+}
+            },
+            tooltip: {
+    callbacks: {
+        label: function(context) {
+            if (context.datasetIndex === 0) {
+
+                return " Valor Normalizado: R$ " +
+                    context.parsed.y.toLocaleString("pt-BR", {
+                        minimumFractionDigits: 4,
+                        maximumFractionDigits: 6
+                    });
             }
+            return " Qtd Autos: " +
+                context.parsed.y.toLocaleString("pt-BR");
+        }
+    }
+}
         },
 
         scales: {
@@ -1305,3 +1371,34 @@ if (btnTema) {
 // EXECUTA DIRETO (sem depender de evento)
 inicializarEventos();
 carregarDados();
+
+// =========================
+// FIX MOBILE: ResizeObserver nos containers de gráfico
+// Garante que Chart.js redimensiona corretamente após filtros no mobile
+// =========================
+function aplicarResizeObserver() {
+    if (typeof ResizeObserver === "undefined") return;
+
+    document.querySelectorAll(".grafico-container").forEach(container => {
+        if (container._resizeObserver) return;
+
+        const observer = new ResizeObserver(() => {
+            container.querySelectorAll("canvas").forEach(canvas => {
+                const id = canvas.id;
+                if (charts[id]) {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            if (charts[id]) charts[id].resize();
+                        });
+                    });
+                }
+            });
+        });
+
+        observer.observe(container);
+        container._resizeObserver = observer;
+    });
+}
+
+// Aplica ResizeObserver após dados carregados
+setTimeout(aplicarResizeObserver, 1000);

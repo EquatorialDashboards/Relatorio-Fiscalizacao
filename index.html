@@ -53,16 +53,28 @@
 </header>
 
 <!-- =========================
-     PAINEL DE CONTROLE
+     PAINEL DE CONTROLE UNIFICADO
 ========================== -->
 <section class="painel-controle">
+
+    <!-- Cabeçalho do painel -->
+    <div class="painel-header">
+        <div class="painel-header-bloco">
+            <i class="fa-solid fa-sliders painel-header-icon"></i>
+            <div>
+                <span class="painel-header-titulo">Filtros &amp; Resumo</span>
+                <span class="painel-header-sub">Selecione os parâmetros para análise</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Linha divisória interna -->
+    <div class="painel-divisor"></div>
 
     <!-- =========================
          FILTROS
     ========================== -->
     <section class="filtros-container">
-
-        <h2 class="titulo-filtros">Filtros</h2>
 
         <div class="filtros">
 
@@ -140,12 +152,18 @@
 
     </section>
 
+    <!-- Linha divisória interna -->
+    <div class="painel-divisor painel-divisor-resumo">
+        <span class="painel-divisor-label">
+            <i class="fa-solid fa-chart-bar"></i>
+            Resumo
+        </span>
+    </div>
+
     <!-- =========================
          CARDS
     ========================== -->
     <section class="cards-container">
-
-        <h2 class="titulo-cards">Resumo</h2>
 
         <div class="cards">
 
@@ -219,7 +237,11 @@
             <button 
                 class="btn-grafico" onclick="alternarGraficoTema()"> Alternar
             </button>
-                <canvas id="graficoTema"></canvas>
+                <div class="scroll-y">
+                    <div class="grafico-scroll-y">
+                        <canvas id="graficoTema"></canvas>
+                    </div>
+                </div>
             </div>
 
             <div class="grafico-container">
