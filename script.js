@@ -299,6 +299,13 @@ function aplicarFiltros() {
             atualizarGraficoEstado();
             atualizarGraficoRazaoUC();
 
+        // Garante resize correto no mobile após renderização
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                Object.values(charts).forEach(c => { if (c) c.resize(); });
+            });
+        });
+
 
     } catch (e) {
         console.error("Erro em aplicarFiltros:", e);
@@ -745,7 +752,31 @@ function atualizarGraficoTema() {
                         ? "Fiscalizações por Ano"
                         : "Tema por Ano"
             ),
-            legend: { display: !isTema, position: "left" },
+            legend: {
+                display: !isTema && modoGraficoTema !== "temaAno",
+                position: "left",
+                labels: {
+                    generateLabels: function(chart) {
+                        const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                        return original;
+                    }
+                }
+            },
+            tooltip: {
+                callbacks: {
+                    title: function(items) {
+                        if (modoGraficoTema === "temaAno" && items.length > 0) {
+                            const datasetIndex = items[0].datasetIndex;
+                            const ds = charts["graficoTema"].data.datasets[datasetIndex];
+                            return ds ? ds.label : (items[0].label || "");
+                        }
+                        return items[0]?.label || "";
+                    },
+                    label: function(context) {
+                        return " Qtd: " + context.parsed.y.toLocaleString("pt-BR");
+                    }
+                }
+            },
             datalabels: {
                 display: isTema,
                 anchor: "end",
@@ -796,11 +827,17 @@ function atualizarGraficoTema() {
         }
     }
 });
-}
 
-// =========================
-// GRÁFICO RAZÃO UC
-// =========================
+// Força resize no mobile após criação do gráfico de tema
+requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+        if (charts["graficoTema"]) charts["graficoTema"].resize();
+    });
+});
+
+// Legenda HTML customizada para modo temaAno
+renderLegendaTema(isEmpilhado ? datasets : []);
+}
 function atualizarGraficoRazaoUC() {
 
     const campo = visaoAtual === "grupo" ? "grupo" : "distribuidora";
@@ -1000,6 +1037,28 @@ if (scroll) {
         }
     }
 });
+}
+
+// =========================
+// LEGENDA CUSTOMIZADA TEMA
+// =========================
+function renderLegendaTema(datasets) {
+    const container = document.getElementById("legendaTema");
+    if (!container) return;
+
+    if (!datasets || datasets.length === 0) {
+        container.style.display = "none";
+        container.innerHTML = "";
+        return;
+    }
+
+    container.style.display = "block";
+    container.innerHTML = datasets.map(ds => `
+        <div class="legenda-item" title="${ds.label}">
+            <span class="legenda-cor" style="background:${ds.backgroundColor};"></span>
+            <span>${ds.label}</span>
+        </div>
+    `).join("");
 }
 
 // =========================
@@ -1302,6 +1361,71 @@ function alternarMetrica(tipo) {
 
     aplicarFiltros();
 }
+// =========================
+// TOOLTIP LEGENDA
+// =========================
+(function() {
+    let _tooltipEl = null;
+
+    function getTooltipEl() {
+        if (!_tooltipEl) {
+            _tooltipEl = document.createElement("div");
+            _tooltipEl.id = "legendTooltip";
+            _tooltipEl.style.cssText = [
+                "position:fixed",
+                "z-index:9999",
+                "background:#1e293b",
+                "color:#f8fafc",
+                "padding:6px 10px",
+                "border-radius:6px",
+                "font-size:12px",
+                "font-weight:500",
+                "pointer-events:none",
+                "white-space:normal",
+                "max-width:280px",
+                "line-height:1.4",
+                "box-shadow:0 4px 12px rgba(0,0,0,0.25)",
+                "display:none"
+            ].join(";");
+            document.body.appendChild(_tooltipEl);
+        }
+        return _tooltipEl;
+    }
+
+    window.mostrarTooltipLegenda = function(nativeEvent, texto) {
+        const el = getTooltipEl();
+        el.textContent = texto;
+        el.style.display = "block";
+
+        const x = nativeEvent.clientX;
+        const y = nativeEvent.clientY;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+
+        // Posiciona à direita do cursor, ajusta se sair da tela
+        let left = x + 12;
+        let top = y - 8;
+
+        el.style.left = "0px";
+        el.style.top = "0px";
+        const w = el.offsetWidth;
+        const h = el.offsetHeight;
+
+        if (left + w > vw - 8) left = x - w - 12;
+        if (top + h > vh - 8) top = vh - h - 8;
+        if (top < 4) top = 4;
+
+        el.style.left = left + "px";
+        el.style.top = top + "px";
+    };
+
+    window.esconderTooltipLegenda = function() {
+        const el = getTooltipEl();
+        if (el) el.style.display = "none";
+    };
+})();
+
+
 let choicesInstances = {};
 
 function iniciarMultiselect() {

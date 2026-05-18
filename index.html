@@ -233,14 +233,17 @@
     </div>
 </div>
 
-            <div class="grafico-container">
-            <button 
-                class="btn-grafico" onclick="alternarGraficoTema()"> Alternar
-            </button>
-                <div class="scroll-y">
-                    <div class="grafico-scroll-y">
-                        <canvas id="graficoTema"></canvas>
+            <div class="grafico-container grafico-container-tema">
+                <button 
+                    class="btn-grafico" onclick="alternarGraficoTema()"> Alternar
+                </button>
+                <div class="grafico-tema-body">
+                    <div class="scroll-y grafico-tema-scroll">
+                        <div class="grafico-scroll-y">
+                            <canvas id="graficoTema"></canvas>
+                        </div>
                     </div>
+                    <div id="legendaTema" class="legenda-tema-custom" style="display:none;"></div>
                 </div>
             </div>
 

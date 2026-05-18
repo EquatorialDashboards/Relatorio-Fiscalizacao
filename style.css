@@ -703,8 +703,102 @@ th, td {
     font-weight: 500;
 }
 /* =========================
-   SLIDER MODERNO COMPACTO
+   LEGENDA CUSTOMIZADA — TEMA POR ANO
 ========================= */
+
+/* Container do gráfico de tema com legenda lateral */
+.grafico-container-tema {
+    overflow: visible;
+}
+
+/* Flex row: gráfico + legenda */
+.grafico-tema-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+    overflow: hidden;
+}
+
+/* Scroll vertical do canvas */
+.grafico-tema-scroll {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Legenda customizada com scroll */
+.legenda-tema-custom {
+    width: 180px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 0 4px 10px;
+    border-left: 1px solid #f1f5f9;
+    margin-left: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+
+.legenda-tema-custom::-webkit-scrollbar {
+    width: 5px;
+}
+
+.legenda-tema-custom::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+}
+
+.legenda-tema-custom::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* Cada item da legenda */
+.legenda-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 4px 0;
+    font-size: 11px;
+    color: #334155;
+    line-height: 1.35;
+    cursor: default;
+}
+
+.legenda-item:hover {
+    color: #1e293b;
+}
+
+/* Bolinha colorida */
+.legenda-cor {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    margin-top: 2px;
+}
+
+@media (max-width: 768px) {
+    .legenda-tema-custom {
+        width: 140px;
+        font-size: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .grafico-tema-body {
+        flex-direction: column;
+    }
+
+    .legenda-tema-custom {
+        width: 100%;
+        max-height: 90px;
+        border-left: none;
+        border-top: 1px solid #f1f5f9;
+        margin-left: 0;
+        margin-top: 6px;
+        padding: 6px 0 0;
+    }
+}
 
 .slider-container {
     display: flex;
@@ -1075,25 +1169,65 @@ th, td {
         gap: 10px;
     }
 
-    /* Gráficos: altura adaptada + forçar redraw no mobile */
+    /* ── Gráficos mobile: layout fixo com altura explícita ── */
+
+    /* O grid vira coluna única no mobile */
+    .graficos-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    /* Todos os containers têm altura fixa e NÃO usam flex para o canvas */
     .grafico-container {
         height: 320px;
         padding: 12px;
+        /* Mantém flex para o botão alternar ficar acima do scroll */
+        display: flex;
+        flex-direction: column;
     }
 
     .grafico-container.destaque {
-        height: 340px;
+        height: 300px;
         padding: 12px;
     }
 
-    /* Garante que canvas respeita container no mobile */
-    .grafico-container canvas {
-        max-width: 100%;
+    /* scroll-x ocupa o espaço restante e tem altura definida */
+    .grafico-container .scroll-x {
+        flex: 1;
+        min-height: 0;
+        height: 100%;
+        -webkit-overflow-scrolling: touch;
     }
 
-    /* Scroll horizontal dos gráficos de barras */
-    .scroll-x {
+    /* scroll-y também */
+    .grafico-container .scroll-y {
+        flex: 1;
+        min-height: 0;
+        height: 100%;
         -webkit-overflow-scrolling: touch;
+    }
+
+    /* grafico-scroll precisa de altura para o canvas existir */
+    .grafico-container .grafico-scroll {
+        height: 100%;
+        min-height: 240px;
+    }
+
+    .grafico-container .grafico-scroll-y {
+        min-height: 240px;
+    }
+
+    /* canvas respeita o wrapper */
+    .grafico-container canvas {
+        max-width: 100%;
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    /* gráfico de estado (sem scroll-x) — canvas direto */
+    #graficoEstado {
+        width: 100% !important;
+        height: 100% !important;
     }
 
     .tabela-box {
@@ -1129,7 +1263,7 @@ th, td {
     }
 
     .grafico-container.destaque {
-        height: 300px;
+        height: 270px;
     }
 
     .painel-header-titulo {
