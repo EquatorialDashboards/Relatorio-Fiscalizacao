@@ -4,23 +4,115 @@ let charts = {};
 let visaoAtual = "distribuidora";
 let metricaAtual = "penalidade";
 let modoGraficoTema = "tema";
+let visaoNCAtiva = false;
 let filtroGrafico = {
     campo: null,
     valores: []
 };
-let atualizando = false;
+let frameAtualizacao = null;
+let tabelaOculta = false;
+
+function normArtigo(s) {
+    return String(s || "")
+        .normalize("NFKD")             
+        .replace(/[\u00A0]/g, " ")        
+        .replace(/\s+/g, " ")              
+        .trim()
+        .toUpperCase();                  
+}
+const MAPA_ARTIGO_DETALHE = (function() {
+    const raw = {
+
+        "Art. 13.  Inciso VI": "VI - praticar tarifas de uso ou conexão na transmissão ou na distribuição em valores superiores aos estabelecidos;",
+        "Art. 13 Inciso VI": "VI - praticar tarifas de uso ou conexão na transmissão ou na distribuição em valores superiores aos estabelecidos;",
+        "Art. 13. Inciso VII": "VII - deixar de assegurar livre acesso aos sistemas de transmissão ou distribuição de energia elétrica, ou de efetuar o atendimento a acessantes nos prazos e nas condições estabelecidas;",
+        "Art. 13. Inciso II": "II - provocar, dar causa ou permitir a propagação de distúrbio que ocasione o desligamento de consumidores;",
+        "Art. 13.  Inciso XI": "XI - praticar conduta que atente contra a concorrência efetiva ou a ordem econômica;",
+
+        "Art. 12. Inciso I, Alínea \"a\"": "I - descumprir às disposições legais, regulamentares e contratuais relativas: a) aos níveis de qualidade dos serviços de energia elétrica;",
+        "Art. 12.  Inciso II": "II - deixar de realizar as obras essenciais à prestação de serviço adequado;",
+        "Art. 12.  Inciso III": "III - deixar de atender pedido de serviços nos prazos e nas condições estabelecidas na legislação ou no contrato;",
+        "Art. 12. Inciso IV": "IV - descumprir aos prazos estabelecidos nos atos de delegação de concessões, permissões ou autorizações para implantar instalações de energia elétrica;",
+        "Art. 12. Inciso V": "V - implantar, operar ou manter instalações de energia elétrica e os respectivos equipamentos de forma inadequada, em face dos requisitos legais, regulamentares ou contratuais aplicáveis;",
+        "Art. 12.  Inciso VI": "VI - deixar de realizar a contabilização em conformidade com as normas, procedimentos ou instruções legais ou regulamentares;",
+        "Art. 12.  Inciso VII": "VII - deixar de encaminhar, para exame e aprovação da ANEEL, nas hipóteses e condições contratuais, legais ou regulamentares;",
+        "Art. 12.  Inciso XI": "XI - criar óbice ou dificuldade ao acesso às instalações necessárias à atividade de fiscalização;",
+        "Art. 12.  Inciso XII": "XII - deixar de atender ao mercado consumidor, de forma abrangente, nos termos da legislação ou da concessão;",
+        "Art. 12.  Inciso XIII": "XIII - impor ônus para o solicitante ou consumidor na prestação do serviço público em desacordo com as disposições legais ou regulamentares;",
+        "Art. 12.  Inciso XXI": "XXI - descumprir disposições legais, regulamentares, contratuais ou constantes do ato de concessão, permissão ou autorização relativas à gestão dos recursos econômico-financeiros;",
+
+        "Art. 11.  Inciso I": "I - deixar de instituir ou de prover condições para o adequado funcionamento da Ouvidoria ou do Conselho de Consumidores;",
+        "Art. 11.  Inciso V": "V - deixar de enviar ou disponibilizar à ANEEL, nos prazos e nas condições estabelecidas na legislação, documentos ou informações econômicas e financeiras;",
+        "Art. 11.  inciso V": "V - deixar de enviar ou disponibilizar à ANEEL, nos prazos e nas condições estabelecidas na legislação, documentos ou informações econômicas e financeiras;",
+        "Art. 11.  Inciso VII": "VII - deixar de cumprir ao disposto nos Procedimentos de Distribuição;",
+        "Art. 11.  Inciso VIII": "VIII - deixar de cumprir ao disposto nos Procedimentos de Rede;",
+        "Art. 11.  Inciso X": "X - deixar de cumprir ao disposto nas Condições Gerais de Fornecimento de Energia Elétrica e nas Regras de Prestação do Serviço Público de Distribuição de Energia Elétrica;",
+        "Art. 11.  Inciso XI": "XI - deixar de cumprir ao disposto na Convenção, nas Regras, nos Procedimentos de Comercialização ou na Convenção Arbitral celebrada entre os agentes e a CCEE;",
+        "Art. 11. inciso XIII": "XIII - deixar de cumprir ao disposto nos contratos de permissão ou concessão;",
+        "Art. 11.  inciso XXI": "XXI - deixar de cumprir determinação da Diretoria Colegiada da ANEEL, no prazo estabelecido;",
+
+        "Art. 10 Inciso I": "I - deixar de manter registro atualizado das reclamações e solicitações dos consumidores;",
+        "Art. 10. Inciso XVIII": "XVIII - realizar leitura ou faturamento em desacordo com a legislação;",
+        "Art. 10. Inciso XX": "XX - deixar de enviar ou disponibilizar à ANEEL informações ou documentos, nos prazos e nas condições estabelecidas na legislação.",
+
+        "Art. 9.  Inciso III": "III - deixar de prestar informações aos consumidores ou usuários, quando solicitado ou conforme determinado nas disposições legais, regulamentares ou contratuais;",
+
+        "Art. 5. Inciso IX": "IX - intervenção para adequação do serviço público de energia elétrica;",
+        "Art. 5.  Inciso V": "V - obrigação de fazer;"
+    };
+
+    const out = {};
+    for (const [k, v] of Object.entries(raw)) {
+        out[normArtigo(k)] = v;
+    }
+
+    return out;
+})();
+
+function getNcsFiltradas(item) {
+    if (filtroGrafico.campo === "ncs" && filtroGrafico.valores.length > 0) {
+        const sel = filtroGrafico.valores.map(normArtigo);
+        return (item.ncs || []).filter(nc => sel.includes(normArtigo(nc)));
+    }
+    return item.ncs || [];
+}
 
 // =========================
 // AUXILIARES
 // ========================
+const btnVisao = document.getElementById("btnVisao");
+const btnVisaoNC = document.getElementById("btnVisaoNC");
+
+function atualizarBotoesVisao() {
+
+    btnVisao.classList.remove("active");
+    btnVisaoNC.classList.remove("active");
+
+    if (visaoNCAtiva) {
+        btnVisaoNC.classList.add("active");
+    } else {
+        btnVisao.classList.add("active");
+    }
+}
+
 Chart.defaults.animation = false;
 function handleChartClick(id, valor) {
 
     let campo = null;
 
-    if (id === "graficoDistribuidora" || id === "graficoGrupo") {
-        campo = visaoAtual === "grupo" ? "grupo" : "distribuidora";
-    } 
+    if (
+    id === "graficoDistribuidora" ||
+    id === "graficoGrupo" ||
+    id === "graficoNCEmpilhado"
+) {
+    campo = visaoAtual === "grupo"
+        ? "grupo"
+        : "distribuidora";
+}
+
+else if (id === "graficoNCBarra") {
+    campo = "ncs";
+}
     else if (id === "graficoEstado") {
     const valorLimpo = String(valor).trim();
 
@@ -125,20 +217,36 @@ function getValorMetrica(item) {
 
     return (valor === null || valor === undefined) ? 0 : (Number(valor) || 0);
 }
-
 function isRegistroValido(item) {
-    // precisa ter auto
-    if (!item.auto || item.auto.trim() === "") return false;
 
-    // Penalidade: conta todos os autos das distribuidoras (já filtradas no carregamento)
+    // precisa ter auto
+    if (!item.auto || item.auto.trim() === "") {
+        return false;
+    }
+
+    // VISÃO NC:
+    // só considera registros com NC
+    if (
+        visaoNCAtiva &&
+        (!item.ncs || item.ncs.length === 0)
+    ) {
+        return false;
+    }
+
+    // Penalidade
     if (metricaAtual === "penalidade") {
         return true;
     }
-    // Multa/Diretoria: só conta se o campo existe e é > 0
+
+    // Multa
     if (metricaAtual === "multa") {
-        return item.multa !== null && item.multa > 0;
+        return item.multa !== null &&
+               item.multa > 0;
     }
-    return item.multaDiretoria !== null && item.multaDiretoria > 0;
+
+    // Diretoria
+    return item.multaDiretoria !== null &&
+           item.multaDiretoria > 0;
 }
 // =========================
 // CARREGAR CSV
@@ -158,30 +266,119 @@ complete: function (resultado) {
 
     console.log("TOTAL LINHAS:", resultado.data.length);
     console.log("COLUNAS CSV:", Object.keys(resultado.data[0]));
-            dados = resultado.data.map(item => ({
-                distribuidora: item["Sigla_Distribuidora"]?.trim() || "Sem Sigla",
-                grupo: item["Grupo_Distribuidora"]?.trim() || "Sem Grupo",
-                estado: (item["Estado"] || "")
-                .toString()
-                .trim()
-                .toUpperCase(),
-                flag: item["Flag_Distribuidora"]?.trim() || "",
-                tema: item["Resumo temas"]?.trim() || "Sem Tema",
-                ano: Number(item["AnoLavratura"]) || null,
-                mercado: parseValorMonetario(item["VlrMercado"]),
-                penalidade: (item["VlrPenalidade"] === undefined || item["VlrPenalidade"] === null || item["VlrPenalidade"].toString().trim() === "") ? null : parseValorMonetario(item["VlrPenalidade"]),
-              multa: (() => {
-                    const v = item["VlrMultaAposJuizo"] ?? item["VlrMultaAposJuizo "] ?? item["VlrMultaApósJuízo"] ?? item["VlrMultaPosJuizo"] ?? null;
-                    return (v === null || v === undefined || v.toString().trim() === "") ? null : parseValorMonetario(v);
-                })(),
-                multaDiretoria: (() => {
-                                    const v = item["VlrMultaAposDiretoria"] ?? item["VlrMultaAposDiretoria "] ?? null;
-                                    return (v === null || v === undefined || v.toString().trim() === "") ? null : parseValorMonetario(v);
-                                })(),
-                tipoPenalidade: item["DscTipoPenalidade"]?.trim() || "Sem Tipo",
-                auto: item["NumAutoInfracao"]?.trim() || ""
-                
-            }));
+           dados = resultado.data.map(item => {
+
+    // =========================
+    // CAPTURA TODAS AS NCs
+    // =========================
+    const ncs = [];
+
+    ["NC_1", "NC_2", "NC_3", "NC_4", "NC_5"]
+    .forEach(coluna => {
+
+        const valor = item[coluna];
+
+        if (!valor || !valor.toString().trim()) return;
+
+        // remove prefixos NC1 -, NC2 -, etc
+        const ncLimpa = normArtigo(
+    valor
+        .toString()
+        .trim()
+
+        // NC1 -, NC2 –, NC3 —
+        .replace(/^NC\s*\d+\s*[-–—]\s*/i, "")
+
+        // NC1 - SFF -
+        .replace(/^NC\s*\d+\s*[-–—]\s*SFF\s*[-–—]\s*/i, "")
+
+        // SFF – Agentes –
+        .replace(/^SFF\s*[–—-]\s*AGENTES?\s*[–—-]\s*/i, "")
+
+        // SFF-CMREF -
+        .replace(/^SFF\s*-\s*CMREF\s*[-–—]\s*/i, "")
+
+        // SFF -
+        .replace(/^SFF\s*[-–—]\s*/i, "")
+
+
+
+        .trim()
+);
+
+        if (ncLimpa) {
+            ncs.push(ncLimpa);
+        }
+    });
+
+    return {
+
+        distribuidora:
+            item["Sigla_Distribuidora"]?.trim() || "Sem Sigla",
+        grupo:
+            item["Grupo_Distribuidora"]?.trim() || "Sem Grupo",
+        estado:
+            (item["Estado"] || "")
+            .toString()
+            .trim()
+            .toUpperCase(),
+        flag:
+            item["Flag_Distribuidora"]?.trim() || "",
+        tema:
+            item["Resumo temas"]?.trim() || "Sem Tema",
+        ano:
+            Number(item["AnoLavratura"]) || null,
+        mercado:
+            parseValorMonetario(item["VlrMercado"]),
+
+        penalidade:
+            (item["VlrPenalidade"] === undefined ||
+             item["VlrPenalidade"] === null ||
+             item["VlrPenalidade"].toString().trim() === "")
+                ? null
+                : parseValorMonetario(item["VlrPenalidade"]),
+
+        multa: (() => {
+            const v =
+                item["VlrMultaAposJuizo"] ??
+                item["VlrMultaAposJuizo "] ??
+                item["VlrMultaApósJuízo"] ??
+                item["VlrMultaPosJuizo"] ??
+                null;
+
+            return (
+                v === null ||
+                v === undefined ||
+                v.toString().trim() === ""
+            )
+                ? null
+                : parseValorMonetario(v);
+        })(),
+
+        multaDiretoria: (() => {
+            const v =
+                item["VlrMultaAposDiretoria"] ??
+                item["VlrMultaAposDiretoria "] ??
+                null;
+
+            return (
+                v === null ||
+                v === undefined ||
+                v.toString().trim() === ""
+            )
+                ? null
+                : parseValorMonetario(v);
+        })(),
+
+        tipoPenalidade:
+            item["DscTipoPenalidade"]?.trim() || "Sem Tipo",
+
+auto: item["NumAutoInfracao"]?.trim() || "",
+
+ncs: ncs
+
+    };
+});
 
             // manter apenas distribuidoras
             dados = dados.filter(x => {
@@ -197,6 +394,7 @@ complete: function (resultado) {
             iniciarMultiselect();
             inicializarSliderAno();
             aplicarFiltros();
+            atualizarBotoesVisao();
             atualizarBotaoVisao();
         },
         error: function (erro) {
@@ -210,6 +408,7 @@ complete: function (resultado) {
 // FILTROS
 // =========================
 function preencherFiltros() {
+
     preencherSelect(
         "filtroDistribuidora",
         [...new Set(dados.map(x => x.distribuidora))]
@@ -225,15 +424,39 @@ function preencherFiltros() {
         [...new Set(dados.map(x => x.tipoPenalidade))]
     );
 
+    preencherSelect(
+        "filtroEstado",
+        [...new Set(dados.map(x => x.estado))]
+    );
+
+    preencherSelect(
+        "filtroTema",
+        [...new Set(dados.map(x => x.tema))]
+    );
+
+    preencherSelect(
+        "filtroNC",
+        [...new Set(
+            dados.flatMap(x => x.ncs || []).map(normArtigo)
+        )]
+    );
+
     [
         "filtroDistribuidora",
         "filtroGrupo",
         "filtroPenalidade",
+        "filtroEstado",
+        "filtroTema",
+        "filtroNC",
         "sliderAnoInicio",
         "sliderAnoFim"
     ].forEach(id => {
+
         const el = document.getElementById(id);
-        if (el) el.addEventListener("change", aplicarFiltros);
+
+        if (el) {
+            el.addEventListener("change", aplicarFiltros);
+        }
     });
 }
 
@@ -253,65 +476,174 @@ function preencherSelect(id, lista) {
         });
 }
 
-function aplicarFiltros() {
-    if (atualizando) return;
-    atualizando = true;
+function getBaseComNC(lista) {
 
-    try {
+    return lista.filter(item =>
+        item.ncs &&
+        item.ncs.length > 0
+    );
+}function aplicarFiltros() {
+
+    // evita múltiplas execuções no mesmo frame
+    if (frameAtualizacao) {
+        cancelAnimationFrame(frameAtualizacao);
+    }
+
+    frameAtualizacao = requestAnimationFrame(() => {
+
         function getValoresSelecionados(selectId) {
-    const select = document.getElementById(selectId);
-    if (!select) return [];
 
-    const valores = Array.from(select.selectedOptions)
-        .map(opt => opt.value)
-    if (valores.includes("")) return [];
+            const select = document.getElementById(selectId);
 
-    return valores;
-}
-        const distribuidoras = getValoresSelecionados("filtroDistribuidora");
-        const grupos = getValoresSelecionados("filtroGrupo");
-        const tipos = getValoresSelecionados("filtroPenalidade");
-        const anoInicio = Number(document.getElementById("sliderAnoInicio")?.value) || null;
-        const anoFim = document.getElementById("sliderAnoFim")?.value;
-        const anoFimNum = anoFim ? Number(anoFim) : null;
-   
+            if (!select) return [];
+
+            const valores = Array.from(select.selectedOptions)
+                .map(opt => opt.value);
+
+            if (valores.includes("")) return [];
+
+            return valores;
+        }
+
+        const distribuidoras =
+            getValoresSelecionados("filtroDistribuidora");
+
+        const grupos =
+            getValoresSelecionados("filtroGrupo");
+
+        const tipos =
+            getValoresSelecionados("filtroPenalidade");
+
+            const estados =
+            getValoresSelecionados("filtroEstado");
+
+        const temas =
+            getValoresSelecionados("filtroTema");
+
+        const ncsSelecionadas =
+            getValoresSelecionados("filtroNC");
+
+        const anoInicio =
+            Number(
+                document.getElementById("sliderAnoInicio")?.value
+            ) || null;
+
+        const anoFim =
+            document.getElementById("sliderAnoFim")?.value;
+
+        const anoFimNum =
+            anoFim ? Number(anoFim) : null;
 
         atualizarLabelsAno();
 
-        dadosFiltrados = dados.filter(item =>
-            (distribuidoras.length === 0 || distribuidoras.includes(item.distribuidora)) &&
-            (grupos.length === 0 || grupos.includes(item.grupo)) &&
-            (tipos.length === 0 || tipos.includes(item.tipoPenalidade)) &&
-            (!anoInicio || item.ano >= anoInicio) &&
-            (!anoFimNum || item.ano <= anoFimNum) && 
-            (!filtroGrafico.campo ||
+        let baseFiltro = [...dados];
+        if (!visaoNCAtiva) {
+
+    const secaoNC =
+        document.getElementById("secaoNC");
+
+    if (secaoNC) {
+        secaoNC.style.display = "none";
+    }
+
+    ["graficoNCEmpilhado", "graficoNCBarra"]
+    .forEach(id => {
+
+        if (charts[id]) {
+
+            charts[id].destroy();
+
+            delete charts[id];
+        }
+    });
+}
+dadosFiltrados = baseFiltro
+    .map(item => {
+        let ncsFiltradas = item.ncs || [];
+
+        if (ncsSelecionadas.length > 0) {
+            const sel = ncsSelecionadas.map(normArtigo);
+
+            ncsFiltradas = ncsFiltradas.filter(nc =>
+                sel.includes(normArtigo(nc))
+            );
+        }
+
+        return {
+            ...item,
+            ncs: ncsFiltradas
+        };
+    })
+    .filter(item => {
+``
+
+    return (
+        (distribuidoras.length === 0 ||
+            distribuidoras.includes(item.distribuidora))
+        &&
+        (grupos.length === 0 ||
+            grupos.includes(item.grupo))
+        &&
+        (tipos.length === 0 ||
+            tipos.includes(item.tipoPenalidade))
+        &&
+        (estados.length === 0 ||
+            estados.includes(item.estado))
+        &&
+        (temas.length === 0 ||
+            temas.includes(item.tema))
+        &&
+        (
+            ncsSelecionadas.length === 0 ||
+            item.ncs.length > 0
+        )
+        &&
+        (!anoInicio || item.ano >= anoInicio)
+        &&
+        (!anoFimNum || item.ano <= anoFimNum)
+        &&
+        (
+            !filtroGrafico.campo ||
             (
                 filtroGrafico.valores &&
                 filtroGrafico.valores.length > 0 &&
-                filtroGrafico.valores.includes(String(item[filtroGrafico.campo]).trim())
-            ))
-        );
+                (
+                    filtroGrafico.campo === "ncs"
+                        ? getNcsFiltradas(item).length > 0
+                        : filtroGrafico.valores.includes(
+                            String(item[filtroGrafico.campo]).trim()
+                        )
+                )
+            )
+        )
+    );
+});
 
-        atualizarCards();
-        atualizarTabela();
-            atualizarGraficos();
-            atualizarGraficoTema();
-            atualizarGraficoEstado();
-            atualizarGraficoRazaoUC();
+       // atualizações
+atualizarCards();
+atualizarCardNC();
+atualizarTabela();
+atualizarGraficos();
+atualizarGraficoEstado();
+atualizarGraficoRazaoUC();
+if (visaoNCAtiva) {
+    atualizarGraficosNC();
+}
+requestAnimationFrame(() => {
 
-        // Garante resize correto no mobile após renderização
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                Object.values(charts).forEach(c => { if (c) c.resize(); });
-            });
-        });
+    requestAnimationFrame(() => {
+        atualizarGraficoTema();
 
+        if (charts["graficoTema"]) {
 
-    } catch (e) {
-        console.error("Erro em aplicarFiltros:", e);
-    } finally {
-        atualizando = false; 
-    }
+            charts["graficoTema"].resize();
+
+            charts["graficoTema"].update("none");
+        }
+    });
+});
+        frameAtualizacao = null;
+    });
 }
 // =========================
 // NC DISTRIBUIDORA
@@ -323,7 +655,6 @@ function calcularNCDistribuidora(lista) {
         const chave = item.distribuidora;
         const valor = Number(item.mercado);
 
-        // 🔴 SÓ ENTRA SE EXISTE VALOR VÁLIDO
        if (!chave || isNaN(valor)) return;
 
         if (!(chave in mapa)) {
@@ -374,6 +705,17 @@ if (metricaAtual === "diretoria") {
 
 document.getElementById("tituloPenalidade").textContent =
     tituloAtual;
+}
+// =========================
+// CARD NC
+// =========================
+function atualizarCardNC() {
+    const el = document.getElementById("totalNC");
+    if (!el) return;
+    const base = getBaseComNC(dadosFiltrados);
+    let total = 0;
+    base.forEach(item => { total += getNcsFiltradas(item).length; });
+    el.textContent = total.toLocaleString("pt-BR");
 }
 // =========================
 // FUNÇÃO AUXILIAR AGRUPAR
@@ -620,33 +962,63 @@ function atualizarGraficos() {
 // GRÁFICO TEMA DINÂMICO
 // =========================
 function atualizarGraficoTema() {
+
     const canvas = document.getElementById("graficoTema");
     if (!canvas) return;
 
+let baseTema = dadosFiltrados.filter(isRegistroValido);
+
+if (visaoNCAtiva) {
+    baseTema = getBaseComNC(baseTema);
+}
     let labels = [];
     let datasets = [];
 
+    // =========================
+    // TEMA
+    // =========================
     if (modoGraficoTema === "tema") {
-        const agrupado = agrupar(dadosFiltrados, "tema");
+
+        const agrupado = agrupar(baseTema, "tema");
 
         const ordenado = Object.entries(agrupado)
             .sort((a, b) => b[1] - a[1]);
 
         labels = ordenado.map(x => x[0]);
 
-        datasets = [{
-            label: "Qtd Autos",
-            data: ordenado.map(x => x[1]),
-            borderRadius: 6,
-            backgroundColor: corGrafico(labels)
-        }];
+      datasets = [{
+    label: "Qtd Autos",
+    data: ordenado.map(x => x[1]),
+    borderRadius: 6,
+    backgroundColor: corGrafico(labels),
+    barThickness: 18,
+    maxBarThickness: 22, 
+    datalabels: {
+        anchor: "end",
+        align: "right",
+        color: "#0f172a",
+        font: {
+            weight: "bold",
+            size: 11
+        },
+        
+        formatter: (value) => {
+            return value.toLocaleString("pt-BR");
+        }
+    }
+}];
+
     }
 
+    // =========================
+    // ANO
+    // =========================
     else if (modoGraficoTema === "ano") {
-        const agrupado = agrupar(dadosFiltrados, "ano");
+
+        const agrupado = agrupar(baseTema, "ano");
 
         const ordenado = Object.entries(agrupado)
-            .sort((a, b) => a[0] - b[0]);
+            .sort((a, b) => Number(a[0]) - Number(b[0]));
 
         labels = ordenado.map(x => x[0]);
 
@@ -654,190 +1026,289 @@ function atualizarGraficoTema() {
             label: "Qtd Autos",
             data: ordenado.map(x => x[1]),
             borderRadius: 6,
-            backgroundColor: corGrafico(labels)
+            backgroundColor: corGrafico(labels),
+            barThickness: 26,
+            maxBarThickness: 32
         }];
     }
 
+    // =========================
+    // TEMA x ANO
+    // =========================
     else {
-        const temas = [...new Set(dadosFiltrados.map(x => x.tema || "Sem Tema"))];
+
+        const temas = [...new Set(
+            baseTema.map(x => x.tema || "Sem Tema")
+        )];
 
         const anos = [...new Set(
-            dadosFiltrados.map(x => x.ano).filter(Boolean)
+            baseTema.map(x => x.ano).filter(Boolean)
         )].sort((a, b) => a - b);
 
         labels = anos;
 
-        datasets = temas.map((tema, i) => ({
-            label: tema,
-            data: anos.map(ano =>
-                dadosFiltrados.filter(x =>
-                    (x.tema || "Sem Tema") === tema && x.ano === ano
+        const datasetsTemaAno = temas.map((tema, i) => {
+            const data = anos.map(ano =>
+                baseTema.filter(x =>
+                    (x.tema || "Sem Tema") === tema &&
+                    x.ano === ano
                 ).length
-            ),
-            stack: "stackTema",
-            borderRadius: 4,
-            backgroundColor: corPorTema(tema, i)
-        }));
+            );
+            return {
+                label: tema,
+                data,
+                _max: Math.max(...data),
+                stack: "temaAno",
+                borderRadius: 4,
+                backgroundColor: corPorTema(tema, i)
+            };
+        });
+        // Pilha mais cheia fica na base
+        datasetsTemaAno.sort((a, b) => b._max - a._max);
+        datasets = datasetsTemaAno.map(({ _max, ...rest }) => rest);
     }
 
+    // DESTROI ANTES
     if (charts["graficoTema"]) {
         charts["graficoTema"].destroy();
         delete charts["graficoTema"];
     }
 
-    // Modo tema: horizontal para caber os nomes longos no eixo Y
     const isTema = modoGraficoTema === "tema";
     const isEmpilhado = modoGraficoTema === "temaAno";
 
-    // Ajusta scroll vertical do wrapper interno para o modo tema horizontal
-    const containerTema = canvas.closest(".grafico-container");
-    const scrollTema = canvas.closest(".grafico-scroll-y");
-    if (containerTema) {
-        containerTema.style.height = ""; // sempre mantém altura padrão do CSS
-    }
-    if (scrollTema) {
+    // =========================
+    // SCROLL
+    // =========================
+    const scrollY = canvas.closest(".grafico-scroll-y");
+
+    if (scrollY) {
+
         if (isTema) {
-            const alturaInterna = Math.max(360, labels.length * 34 + 80);
-            scrollTema.style.height = alturaInterna + "px";
+
+            scrollY.style.height =
+                Math.max(400, labels.length * 34) + "px";
+
         } else {
-            scrollTema.style.height = "100%";
+
+            scrollY.style.height = "100%";
         }
     }
 
     charts["graficoTema"] = new Chart(canvas, {
-    type: "bar",
-    data: { labels, datasets },
-    options: {
-        indexAxis: isTema ? "y" : "x",
-        responsive: true,
-        maintainAspectRatio: false,
 
-        onClick: (evt, elements, chart) => {
-            const points = chart.getElementsAtEventForMode(
-                evt,
-                'nearest',
-                { intersect: true },
-                true
-            );
+        type: "bar",
 
-            if (!points.length) return;
-
-            const index = points[0].index;
-            let valor;
-
-            if (modoGraficoTema === "tema") {
-                valor = chart.data.labels[index];
-            } else if (modoGraficoTema === "ano") {
-                valor = chart.data.labels[index];
-            } else {
-                const datasetIndex = points[0].datasetIndex;
-                valor = chart.data.datasets[datasetIndex].label;
-            }
-
-            let campo = modoGraficoTema === "ano" ? "ano" : "tema";
-
-            if (filtroGrafico.campo === campo && filtroGrafico.valores?.includes(valor)) {
-                filtroGrafico = { campo: null, valores: [] };
-            } else {
-                filtroGrafico = { campo, valores: [valor] };
-            }
-            aplicarFiltros();
+        data: {
+            labels,
+            datasets
         },
 
-        plugins: {
-            title: tituloPadrao(
-                isTema
-                    ? "Fiscalizações por Tema"
-                    : modoGraficoTema === "ano"
-                        ? "Fiscalizações por Ano"
-                        : "Tema por Ano"
-            ),
-            legend: {
-                display: !isTema && modoGraficoTema !== "temaAno",
-                position: "left",
-                labels: {
-                    generateLabels: function(chart) {
-                        const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-                        return original;
-                    }
-                }
-            },
-            tooltip: {
-                callbacks: {
-                    title: function(items) {
-                        if (modoGraficoTema === "temaAno" && items.length > 0) {
-                            const datasetIndex = items[0].datasetIndex;
-                            const ds = charts["graficoTema"].data.datasets[datasetIndex];
-                            return ds ? ds.label : (items[0].label || "");
-                        }
-                        return items[0]?.label || "";
-                    },
-                    label: function(context) {
-                        return " Qtd: " + context.parsed.y.toLocaleString("pt-BR");
-                    }
-                }
-            },
-            datalabels: {
-                display: isTema,
-                anchor: "end",
-                align: "end",
-                color: "#334155",
-                font: { weight: "bold", size: 11 },
-                formatter: v => v.toLocaleString("pt-BR")
-            }
-        },
+        options: {
 
-        scales: isTema ? {
-            // Horizontal: Y = categorias (temas), X = valores
-            y: {
-                ticks: {
-                    font: { size: 12 },
-                    color: "#334155",
-                    autoSkip: false,
-                    crossAlign: "far",
-                    callback: function(value) {
-                        const label = this.getLabelForValue(value);
-                        // quebra em múltiplas linhas a cada 35 chars
-                        const max = 35;
-                        if (label.length <= max) return label;
-                        const words = label.split(" ");
-                        const lines = [];
-                        let line = "";
-                        words.forEach(word => {
-                            if ((line + " " + word).trim().length > max) {
-                                lines.push(line.trim());
-                                line = word;
-                            } else {
-                                line = (line + " " + word).trim();
-                            }
-                        });
-                        if (line) lines.push(line.trim());
-                        return lines;
-                    }
-                },
-                grid: { display: false }
+            indexAxis: isTema ? "y" : "x",
+
+            responsive: true,
+
+            maintainAspectRatio: false,
+
+            animation: false,
+
+            onClick: (evt, elements, chart) => {
+
+                const points = chart.getElementsAtEventForMode(
+                    evt,
+                    "nearest",
+                    { intersect: true },
+                    true
+                );
+
+                if (!points.length) return;
+
+                const index = points[0].index;
+
+                let valor;
+
+                if (modoGraficoTema === "tema") {
+                    valor = chart.data.labels[index];
+                }
+
+                else if (modoGraficoTema === "ano") {
+                    valor = chart.data.labels[index];
+                }
+
+                else {
+
+                    const datasetIndex =
+                        points[0].datasetIndex;
+
+                    valor =
+                        chart.data.datasets[datasetIndex].label;
+                }
+
+                const campo =
+                    modoGraficoTema === "ano"
+                        ? "ano"
+                        : "tema";
+
+                const valorString = String(valor).trim();
+
+                if (
+                    filtroGrafico.campo === campo &&
+                    filtroGrafico.valores.includes(valorString)
+                ) {
+
+                    filtroGrafico = {
+                        campo: null,
+                        valores: []
+                    };
+
+                } else {
+
+                    filtroGrafico = {
+                        campo,
+                        valores: [valorString]
+                    };
+                }
+
+                aplicarFiltros();
             },
-            x: {
-                beginAtZero: true,
-                ticks: { color: "#94a3b8", font: { size: 11 } }
-            }
-        } : {
-            x: { stacked: isEmpilhado },
-            y: { stacked: isEmpilhado, beginAtZero: true }
+
+            plugins: {
+
+                title: tituloPadrao(
+                    isTema
+                        ? "Fiscalizações por Tema"
+                        : modoGraficoTema === "ano"
+                            ? "Fiscalizações por Ano"
+                            : "Tema por Ano"
+                ),
+
+legend: {
+    display: !isTema && modoGraficoTema !== "temaAno",
+    position: "left",
+    labels: {
+        generateLabels: function(chart) {
+            return Chart.defaults
+                .plugins
+                .legend
+                .labels
+                .generateLabels(chart);
         }
     }
-});
+},
 
-// Força resize no mobile após criação do gráfico de tema
-requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-        if (charts["graficoTema"]) charts["graficoTema"].resize();
-    });
-});
+tooltip: {
+    callbacks: {
 
-// Legenda HTML customizada para modo temaAno
-renderLegendaTema(isEmpilhado ? datasets : []);
+        title: function(items) {
+
+            if (
+                modoGraficoTema === "temaAno" &&
+                items.length > 0
+            ) {
+
+                const datasetIndex =
+                    items[0].datasetIndex;
+
+                const ds =
+                    charts["graficoTema"]
+                        .data
+                        .datasets[datasetIndex];
+
+                return ds
+                    ? ds.label
+                    : (items[0].label || "");
+            }
+
+            return items[0]?.label || "";
+        },
+
+        label: function(context) {
+
+            const valor = isTema
+                ? context.parsed.x
+                : context.parsed.y;
+
+            return " Qtd: " +
+                Number(valor)
+                    .toLocaleString("pt-BR");
+        }
+    }
+},
+    datalabels: {
+    display: true,
+    anchor: isTema ? "end" : "end",
+    align: isTema ? "right" : "top",
+    offset: 6,
+    clamp: true,
+    color: "#0f172a",
+    font: {  
+        weight: "bold",
+        size: 12
+    },
+    formatter: (value, context) => {
+
+        if (modoGraficoTema === "tema") {
+            return value.toLocaleString("pt-BR");
+        }
+        return null;
+    }
 }
+            },
+
+            scales: isTema
+                ? {
+                    y: {
+                        ticks: {
+                            autoSkip: false,
+                            color: "#334155",
+                            align: "start",
+                            crossAlign: "far",
+                            padding: 8
+                        },
+                        grid: {
+                            display: false
+                        }
+                    },
+
+                    x: {
+                        beginAtZero: true
+                    }
+                }
+
+                : {
+
+                    x: {
+                        stacked: isEmpilhado,
+                        ticks: {
+                            autoSkip: false
+                        }
+                    },
+
+                    y: {
+                        stacked: isEmpilhado,
+                        beginAtZero: true
+                    }
+                }
+        }
+    });
+
+    renderLegendaTema(
+        isEmpilhado ? datasets : []
+    );
+
+    requestAnimationFrame(() => {
+
+        if (charts["graficoTema"]) {
+
+            charts["graficoTema"].resize();
+
+            charts["graficoTema"].update("none");
+        }
+    });
+}
+
 function atualizarGraficoRazaoUC() {
 
     const campo = visaoAtual === "grupo" ? "grupo" : "distribuidora";
@@ -1084,7 +1555,7 @@ function atualizarGraficoEstado() {
     if (!canvas) return;
 
     // Base original
-    let base = dadosFiltrados.filter(item => item.estado);
+    let base = dadosFiltrados.filter(item => item.estado && isRegistroValido(item));
 
     if (
         filtroGrafico.campo === "estado" &&
@@ -1152,6 +1623,534 @@ function atualizarGraficoEstado() {
 }
 
 // =========================
+// VISÃO NC
+// =========================
+function alternarVisaoNC() {
+
+    visaoNCAtiva = !visaoNCAtiva;
+    atualizarBotoesVisao();
+
+    const secao = document.getElementById("secaoNC");
+    const btn = document.getElementById("btnVisaoNC");
+
+    if (!secao || !btn) return;
+
+    if (visaoNCAtiva) {
+
+        secao.style.display = "block";
+        btn.classList.add("active");
+
+    } else {
+
+        secao.style.display = "none";
+        btn.classList.remove("active");
+    }
+    aplicarFiltros();
+    
+}
+// =========================
+// NC EMPILHADO
+// =========================
+function atualizarGraficoNCEmpilhado() {
+
+    const canvas =
+        document.getElementById("graficoNCEmpilhado");
+
+    if (!canvas) return;
+
+    const campo =
+        visaoAtual === "grupo"
+            ? "grupo"
+            : "distribuidora";
+
+    const agrupado = {};
+
+    const tiposNC = new Set();
+
+    const baseNC = dadosFiltrados.filter(item =>
+    getNcsFiltradas(item).length > 0
+);
+
+baseNC.forEach(item => {
+        const chave =
+            item[campo] || "Sem Informação";
+
+        if (!agrupado[chave]) {
+            agrupado[chave] = {};
+        }
+
+        getNcsFiltradas(item).forEach(nc => {
+
+            tiposNC.add(nc);
+
+            if (!agrupado[chave][nc]) {
+                agrupado[chave][nc] = 0;
+            }
+
+            agrupado[chave][nc] += 1;
+        });
+    });
+
+const totalNCPorLabel = {};
+
+baseNC.forEach(item => {
+    const chave =
+        visaoAtual === "grupo"
+            ? item.grupo
+            : item.distribuidora;
+
+    if (!totalNCPorLabel[chave]) {
+        totalNCPorLabel[chave] = 0;
+    }
+
+    totalNCPorLabel[chave] += getNcsFiltradas(item).length;
+});
+
+const labelsOrdenados = Object.keys(agrupado)
+    .sort((a, b) =>
+        totalNCPorLabel[b] - totalNCPorLabel[a]
+    );
+    const labels = labelsOrdenados;
+
+    // Ordena datasets pelo valor máximo em qualquer barra: pilha mais cheia fica na base
+    const datasetsNC = [...tiposNC].map((nc, index) => {
+        const data = labels.map(label => agrupado[label][nc] || 0);
+        return {
+            label: nc,
+            data,
+            _max: Math.max(...data),
+            stack: "nc",
+            borderRadius: 4,
+            backgroundColor: corPorTema(nc, index)
+        };
+    });
+    datasetsNC.sort((a, b) => b._max - a._max);
+    const datasets = datasetsNC.map(({ _max, ...rest }) => rest);
+
+    const wrapper =
+        document.getElementById(
+            "wrapperGraficoNCEmpilhado"
+        );
+
+    if (wrapper) {
+        const minW = labels.length <= 4
+            ? Math.max(labels.length * 140, 400)
+            : Math.max(labels.length * 100, 700);
+        wrapper.style.minWidth = minW + "px";
+    }
+
+    if (charts["graficoNCEmpilhado"]) {
+
+        charts["graficoNCEmpilhado"].destroy();
+
+        delete charts["graficoNCEmpilhado"];
+    }
+
+    charts["graficoNCEmpilhado"] =
+        new Chart(canvas, {
+
+            type: "bar",
+            plugins: [ChartDataLabels],
+            data: {
+                labels,
+                datasets
+            },
+
+        options: {
+
+    responsive: true,
+
+    maintainAspectRatio: false,
+
+    onClick: (evt, elements, chart) => {
+
+    const points = chart.getElementsAtEventForMode(
+        evt,
+        "nearest",
+        { intersect: true },
+        true
+    );
+
+    if (!points.length) return;
+
+    const point = points[0];
+
+    // DISTRIBUIDORA / GRUPO
+    const index = point.index;
+
+    // DATASET = NC
+    const datasetIndex = point.datasetIndex;
+
+    const distribuidora =
+        chart.data.labels[index];
+
+    const nc = normArtigo(chart.data.datasets[datasetIndex].label);
+
+    // FILTRO POR NC
+    if (filtroGrafico.campo !== "ncs") {
+
+        filtroGrafico = {
+            campo: "ncs",
+            valores: [nc]
+        };
+
+    } else {
+
+        const idx = filtroGrafico.valores.map(normArtigo).indexOf(nc);
+
+        if (idx >= 0) {
+            filtroGrafico.valores.splice(idx, 1);
+        } else {
+            filtroGrafico.valores.push(nc);
+        }
+
+        if (filtroGrafico.valores.length === 0) {
+            filtroGrafico = {
+                campo: null,
+                valores: []
+            };
+        }
+    }
+
+    aplicarFiltros();
+},
+    plugins: {
+
+        title: tituloPadrao(
+            "Não Conformidades"
+        ),
+
+        legend: {
+            display: false
+        },
+
+        tooltip: {
+            callbacks: {
+                label: function(context) {
+                    return " " + normArtigo(context.dataset.label || "") + ": " + context.parsed.y;
+                },
+                afterLabel: function(context) {
+                    const artigo = normArtigo(context.dataset.label || "");
+                    const detalhe = MAPA_ARTIGO_DETALHE[artigo];
+                    if (!detalhe) return "";
+                    const palavras = detalhe.split(" ");
+                    const linhas = []; let linha = "";
+                    palavras.forEach(p => {
+                        if ((linha + " " + p).trim().length > 60) { linhas.push(linha.trim()); linha = p; }
+                        else { linha = (linha + " " + p).trim(); }
+                    });
+                    if (linha) linhas.push(linha);
+                    return linhas;
+                }
+            }
+        },
+
+        datalabels: {
+            anchor: "end",
+            align: "top",
+            offset: 2,
+            color: "#0f172a",
+            font: {
+                weight: "bold",
+                size: 11
+            },
+            formatter: (value, context) => {
+                const datasetIndex = context.datasetIndex;
+                const datasets = context.chart.data.datasets;
+                const isUltimoDataset = datasetIndex === datasets.length - 1;
+                if (!isUltimoDataset) return null;
+
+                // Soma total da pilha para este label
+                const total = datasets.reduce((soma, ds) => {
+                    return soma + (ds.data[context.dataIndex] || 0);
+                }, 0);
+                return total > 0 ? total.toLocaleString("pt-BR") : null;
+            }
+        },
+    },
+
+    scales: {
+
+        x: {
+            stacked: true,
+            ticks: {
+                autoSkip: false,
+                maxRotation: 45,
+                minRotation: 30
+            }
+        },
+
+        y: {
+            stacked: true,
+            beginAtZero: true
+        }
+    }
+}
+        });
+
+    renderLegendaNC(datasets);
+}
+function atualizarGraficoNCBarra() {
+
+    const canvas =
+        document.getElementById("graficoNCBarra");
+
+    if (!canvas) return;
+
+    const agrupado = {};
+
+    const baseNC = dadosFiltrados.filter(item =>
+    getNcsFiltradas(item).length > 0);
+
+    // AGRUPA POR NC
+    baseNC.forEach(item => {
+
+        getNcsFiltradas(item).forEach(nc => {
+
+            const chave = nc || "Sem NC";
+
+            if (!agrupado[chave]) {
+                agrupado[chave] = 0;
+            }
+
+            agrupado[chave] += 1;
+        });
+    });
+
+    const ordenado = Object.entries(agrupado)
+        .sort((a, b) => b[1] - a[1]);
+
+    const labels =
+        ordenado.map(x => x[0]);
+
+    const valores =
+        ordenado.map(x => x[1]);
+
+    const wrapper =
+        document.getElementById(
+            "wrapperGraficoNCBarra"
+        );
+
+    if (wrapper) {
+        const minW = labels.length <= 5
+            ? Math.max(labels.length * 120, 400)
+            : Math.max(labels.length * 80, 900);
+        wrapper.style.minWidth = minW + "px";
+    }
+
+    if (charts["graficoNCBarra"]) {
+
+        charts["graficoNCBarra"].destroy();
+
+        delete charts["graficoNCBarra"];
+    }
+
+    charts["graficoNCBarra"] =
+        new Chart(canvas, {
+
+            type: "bar",
+
+            data: {
+
+                labels,
+
+                datasets: [{
+
+                    label: "Ocorrências de NC",
+
+                    data: valores,
+
+                    borderRadius: 6,
+
+                    backgroundColor:
+                        corGrafico(labels),
+
+                    barThickness: 18,
+
+                    maxBarThickness: 22
+                }]
+            },
+
+            plugins: [ChartDataLabels],
+
+            options: {
+
+                responsive: true,
+
+                maintainAspectRatio: false,
+
+                onClick: (evt, elements, chart) => {
+
+                    const points = chart.getElementsAtEventForMode(
+                        evt,
+                        "nearest",
+                        { intersect: true },
+                        true
+                    );
+
+                    if (!points.length) return;
+
+                    const index = points[0].index;
+                    const valor = normArtigo(chart.data.labels[index]);
+
+                    if (filtroGrafico.campo !== "ncs") {
+                        filtroGrafico = { campo: "ncs", valores: [valor] };
+                    } else {
+                        const idx = filtroGrafico.valores.map(normArtigo).indexOf(valor);
+                        if (idx >= 0) {
+                            filtroGrafico.valores.splice(idx, 1);
+                        } else {
+                            filtroGrafico.valores.push(valor);
+                        }
+                        if (filtroGrafico.valores.length === 0) {
+                            filtroGrafico = { campo: null, valores: [] };
+                        }
+                    }
+
+                    aplicarFiltros();
+                },
+
+                plugins: {
+
+                    title: tituloPadrao(
+                        "NCs Mais Recorrentes"
+                    ),
+
+                    legend: {
+                        display: false
+                    },
+
+                    datalabels: {
+                        anchor: "end",
+                        align: "top",
+                        offset: 4,
+                        color: "#0f172a",
+                        font: {
+                            weight: "bold",
+                            size: 11
+                        },
+                        formatter: (value, context) => {
+                            const label = normArtigo(context.chart.data.labels[context.dataIndex]);
+                            const isSel = filtroGrafico.campo === "ncs" &&
+                                filtroGrafico.valores.map(normArtigo).includes(label);
+                            return isSel ? "Total: " + value.toLocaleString("pt-BR") : (context.dataIndex + 1) + "°";
+                        }
+                    },
+
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return " Ocorrências: " + context.parsed.y.toLocaleString("pt-BR");
+                            },
+                            afterLabel: function(context) {
+                                const artigo = normArtigo(context.label);
+                                const detalhe = MAPA_ARTIGO_DETALHE[artigo];
+                                if (!detalhe) return "";
+                                const palavras = detalhe.split(" ");
+                                const linhas = []; let linha = "";
+                                palavras.forEach(p => {
+                                    if ((linha + " " + p).trim().length > 60) { linhas.push(linha.trim()); linha = p; }
+                                    else { linha = (linha + " " + p).trim(); }
+                                });
+                                if (linha) linhas.push(linha);
+                                return linhas;
+                            }
+                        }
+                    }
+                },
+
+                scales: {
+
+                    x: {
+
+                        ticks: {
+
+                            autoSkip: false,
+
+                            maxRotation: 45,
+
+                            minRotation: 30,
+
+                            callback: function(value) {
+
+                                const label =
+                                    this.getLabelForValue(value);
+
+                                return label.length > 18
+                                    ? label.substring(0, 18) + "..."
+                                    : label;
+                            }
+                        }
+                    },
+
+                    y: {
+
+                        beginAtZero: true,
+
+                        title: {
+
+                            display: true,
+
+                            text: "Qtd Ocorrências"
+                        }
+                    }
+                }
+            }
+        });
+}
+// =========================
+// LEGENDA NC
+// =========================
+
+function renderLegendaNC(datasets) {
+
+    const container =
+        document.getElementById("legendaNC");
+
+    if (!container) return;
+
+    container.innerHTML =
+        datasets.map(ds => `
+
+        <div
+            class="legenda-item"
+            title="${ds.label}">
+
+            <span
+                class="legenda-cor"
+                style="background:${ds.backgroundColor};">
+            </span>
+
+            <span>${ds.label}</span>
+
+        </div>
+
+    `).join("");
+}
+// =========================
+// ATUALIZAR TODOS GRÁFICOS NC
+// =========================
+function atualizarGraficosNC() {
+
+    atualizarGraficoNCEmpilhado();
+
+    atualizarGraficoNCBarra();
+
+    requestAnimationFrame(() => {
+
+        if (charts["graficoNCEmpilhado"]) {
+            charts["graficoNCEmpilhado"].resize();
+            charts["graficoNCEmpilhado"].update("none");
+        }
+
+        if (charts["graficoNCBarra"]) {
+            charts["graficoNCBarra"].resize();
+            charts["graficoNCBarra"].update("none");
+        }
+    });
+}
+
+// =========================
 // TABELA
 // =========================
 function atualizarTabela() {
@@ -1160,19 +2159,61 @@ function atualizarTabela() {
 
     tbody.innerHTML = "";
 
-    dadosFiltrados.slice(0, 100).forEach(item => {
-    tbody.innerHTML += `
-        <tr>
-            <td>${item.distribuidora}</td>
-            <td>${item.grupo}</td>
-            <td>${item.estado}</td>
-            <td>${item.tema}</td>
-            <td>${formatarMoeda(getValorMetrica(item))}</td>
-            <td>${item.auto}</td>
-        </tr>
-    `;
-    });
+    dadosFiltrados
+        .filter(item => {
+            // Respeita metricaAtual (multa/diretoria exigem valor > 0)
+            // e visaoNCAtiva (exige que o item tenha NCs)
+            if (!isRegistroValido(item)) return false;
+
+            // Filtro adicional de clique em barra de NC
+            if (filtroGrafico.campo === "ncs") {
+                return getNcsFiltradas(item).length > 0;
+            }
+            return true;
+        })
+        .slice(0, 100)
+        .forEach(item => {
+
+            const ncsFiltradas = getNcsFiltradas(item);
+
+            const ncsTexto = (ncsFiltradas.length > 0)
+                ? ncsFiltradas.map(nc =>
+                    `<span class="tabela-nc-tag">${nc}</span>`
+                  ).join("")
+                : '<span style="color:#94a3b8;font-size:11px;">—</span>';
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${item.distribuidora}</td>
+                    <td>${item.grupo}</td>
+                    <td>${item.estado}</td>
+                    <td>${item.tema}</td>
+                    <td>${formatarMoeda(getValorMetrica(item))}</td>
+                    <td>${item.auto}</td>
+                    <td class="tabela-nc-cell">${ncsTexto}</td>
+                </tr>
+            `;
+        });
+const conteudo = document.getElementById("conteudoTabela");
+const icone = document.getElementById("iconeTabela");
+
+if (conteudo && icone) {
+    conteudo.style.display = tabelaOculta ? "none" : "block";
+    icone.textContent = tabelaOculta ? "▶" : "▼";
 }
+}
+window.toggleTabela = function () {
+
+    const conteudo = document.getElementById("conteudoTabela");
+    const icone = document.getElementById("iconeTabela");
+
+    if (!conteudo || !icone) return;
+
+    tabelaOculta = !tabelaOculta;
+
+    conteudo.style.display = tabelaOculta ? "none" : "block";
+    icone.textContent = tabelaOculta ? "▶" : "▼";
+};
 
 function aplicarFiltroGrafico(id, valor) {
 
@@ -1252,30 +2293,68 @@ if (btnDownload) {
         URL.revokeObjectURL(url);
     });
 }
-
 function atualizarBotaoVisao() {
+
     const btn = document.getElementById("btnVisao");
+
     if (!btn) return;
 
-    const texto = btn.querySelector(".texto");
+    btn.classList.remove(
+        "btn-distribuidora",
+        "btn-grupo"
+    );
 
     if (visaoAtual === "distribuidora") {
-        texto.textContent = "Alternar para Grupo";
+
+        btn.classList.add("btn-distribuidora");
+
+        btn.innerHTML = `
+            <span class="icon">🏢</span>
+            Distribuidora
+        `;
+
     } else {
-        texto.textContent = "Alternar para Distribuidora";
+
+        btn.classList.add("btn-grupo");
+
+        btn.innerHTML = `
+            <span class="icon">🏭</span>
+            Grupo
+        `;
     }
-
-    const icon = btn.querySelector(".icon");
-
-if (visaoAtual === "distribuidora") {
-    texto.textContent = "Alternar para Grupo";
-    icon.textContent = "🏢";
-} else {
-    texto.textContent = "Alternar para Distribuidora";
-    icon.textContent = "🏭";
-}
 }
 
+function atualizarBotaoNC() {
+
+    const btn =
+        document.getElementById("btnVisaoNC");
+
+    if (!btn) return;
+
+    btn.classList.remove(
+        "btn-nc-inativo",
+        "btn-nc-ativo"
+    );
+
+    if (visaoNCAtiva) {
+
+        btn.classList.add("btn-nc-ativo");
+
+        btn.innerHTML = `
+            <span class="icon">📋</span>
+            Visão NC Ativa
+        `;
+
+    } else {
+
+        btn.classList.add("btn-nc-inativo");
+
+        btn.innerHTML = `
+            <span class="icon">📄</span>
+            Visão NC
+        `;
+    }
+}
 function corPorTema(tema, index) {
     const cores = [
         "#3b82f6",
@@ -1295,7 +2374,8 @@ function limparFiltroGrafico() {
     filtroGrafico = { campo: null, valores: [] };
 
     // Resetar instâncias Choices.js (limpa visual e seleção interna)
-    ["filtroDistribuidora", "filtroGrupo", "filtroPenalidade"].forEach(id => {
+    ["filtroDistribuidora", "filtroGrupo", "filtroPenalidade",
+     "filtroEstado", "filtroTema", "filtroNC"].forEach(id => {
         if (choicesInstances[id]) {
             choicesInstances[id].removeActiveItems();
         }
@@ -1360,6 +2440,9 @@ function alternarMetrica(tipo) {
     });
 
     aplicarFiltros();
+    if (visaoNCAtiva) {
+    atualizarGraficosNC();
+}
 }
 // =========================
 // TOOLTIP LEGENDA
@@ -1430,7 +2513,7 @@ let choicesInstances = {};
 
 function iniciarMultiselect() {
 
-    ["filtroDistribuidora", "filtroGrupo", "filtroPenalidade"]
+    ["filtroDistribuidora", "filtroGrupo", "filtroPenalidade","filtroEstado","filtroTema","filtroNC"]
     .forEach(id => {
 
         if (choicesInstances[id]) {
@@ -1491,10 +2574,18 @@ if (btnTema) {
         btnLimpar.onclick = limparFiltroGrafico;
     }
 }
+const btnNC =
+    document.getElementById("btnVisaoNC");
+
+if (btnNC) {
+
+    btnNC.onclick = alternarVisaoNC;
+}
 
 // EXECUTA DIRETO (sem depender de evento)
 inicializarEventos();
 carregarDados();
+carregarManualRegulatorio();
 
 // =========================
 // FIX MOBILE: ResizeObserver nos containers de gráfico
@@ -1526,3 +2617,198 @@ function aplicarResizeObserver() {
 
 // Aplica ResizeObserver após dados carregados
 setTimeout(aplicarResizeObserver, 1000);
+// =========================
+// MANUAL DE DADOS
+// =========================
+
+// Cache dos dados do CSV do manual regulatório
+let _dadosManualRegulatorio = null;
+
+async function carregarManualRegulatorio() {
+    try {
+        const response = await fetch("./manual_regulatorio.csv");
+        const texto = await response.text();
+
+        const resultado = Papa.parse(texto, {
+            header: true,
+            skipEmptyLines: true
+        });
+
+        _dadosManualRegulatorio = resultado.data;
+    } catch (e) {
+        console.error("Erro ao carregar manual_regulatorio.csv:", e);
+        _dadosManualRegulatorio = [];
+    }
+}
+const MAPA_ARTIGO_EXIBICAO = {
+    "Art. 13.  Inciso VI": "VI - praticar tarifas de uso ou conexão na transmissão ou na distribuição em valores superiores aos estabelecidos;",
+    "Art. 13. Inciso VII": "VII - deixar de assegurar livre acesso aos sistemas de transmissão ou distribuição de energia elétrica, ou de efetuar o atendimento a acessantes nos prazos e nas condições estabelecidas;",
+    "Art. 13.  Inciso XI": "XI - praticar conduta que atente contra a concorrência efetiva ou a ordem econômica;",
+    "Art. 13. Inciso II": "II - provocar, dar causa ou permitir a propagação de distúrbio que ocasione o desligamento de consumidores;",
+
+    "Art. 12. Inciso I, Alínea \"a\"": "I - descumprir às disposições legais, regulamentares e contratuais relativas: a) aos níveis de qualidade dos serviços de energia elétrica;",
+    "Art. 12.  Inciso II": "II - deixar de realizar as obras essenciais à prestação de serviço adequado;",
+    "Art. 12.  Inciso III": "III - deixar de atender pedido de serviços nos prazos e nas condições estabelecidas na legislação ou no contrato;",
+    "Art. 12. Inciso IV": "IV - descumprir aos prazos estabelecidos nos atos de delegação de concessões, permissões ou autorizações para implantar instalações de energia elétrica;",
+    "Art. 12 Inciso V": "V - implantar, operar ou manter instalações de energia elétrica e os respectivos equipamentos de forma inadequada, em face dos requisitos legais, regulamentares ou contratuais aplicáveis;",
+    "Art. 12.  Inciso VI": "VI - deixar de realizar a contabilização em conformidade com as normas, procedimentos ou instruções legais ou regulamentares;",
+    "Art. 12.  Inciso VII": "VII - deixar de encaminhar, para exame e aprovação da ANEEL, nas hipóteses e condições contratuais, legais ou regulamentares;",
+    "Art. 12.  Inciso XI": "XI - criar óbice ou dificuldade ao acesso às instalações necessárias à atividade de fiscalização;",
+    "Art. 12.  Inciso XII": "XII - deixar de atender ao mercado consumidor, de forma abrangente, nos termos da legislação ou da concessão;",
+    "Art. 12.  Inciso XIII": "XIII - impor ônus para o solicitante ou consumidor na prestação do serviço público em desacordo com as disposições legais ou regulamentares;",
+    "Art. 12.  Inciso XXI": "XXI - descumprir disposições legais, regulamentares, contratuais ou constantes do ato de concessão, permissão ou autorização relativas à gestão dos recursos econômico-financeiros;",
+
+    "Art. 11.  Inciso I": "I - deixar de instituir ou de prover condições para o adequado funcionamento da Ouvidoria ou do Conselho de Consumidores;",
+    "Art. 11.  Inciso V": "V - deixar de enviar ou disponibilizar à ANEEL, nos prazos e nas condições estabelecidas na legislação, documentos ou informações econômicas e financeiras;",
+    "Art. 11.  Inciso VII": "VII - deixar de cumprir ao disposto nos Procedimentos de Distribuição;",
+    "Art. 11.  Inciso VIII": "VIII - deixar de cumprir ao disposto nos Procedimentos de Rede;",
+    "Art. 11.  Inciso X": "X - deixar de cumprir ao disposto nas Condições Gerais de Fornecimento de Energia Elétrica e nas Regras de Prestação do Serviço Público de Distribuição de Energia Elétrica;",
+    "Art. 11.  Inciso XI": "XI - deixar de cumprir ao disposto na Convenção, nas Regras, nos Procedimentos de Comercialização ou na Convenção Arbitral celebrada entre os agentes e a CCEE;",
+    "Art. 11. inciso XIII": "XIII - deixar de cumprir ao disposto nos contratos de permissão ou concessão;",
+    "Art. 11.  inciso XXI": "XXI - deixar de cumprir determinação da Diretoria Colegiada da ANEEL, no prazo estabelecido;",
+
+    "Art. 10 Inciso I": "I - deixar de manter registro atualizado das reclamações e solicitações dos consumidores;",
+    "Art. 10. Inciso XVIII": "XVIII - realizar leitura ou faturamento em desacordo com a legislação;",
+    "Art. 10. Inciso XX": "XX - deixar de enviar ou disponibilizar à ANEEL informações ou documentos, nos prazos e nas condições estabelecidas na legislação.",
+
+    "Art. 9.  Inciso III": "III - deixar de prestar informações aos consumidores ou usuários, quando solicitado ou conforme determinado nas disposições legais, regulamentares ou contratuais;",
+
+    "Art. 5. Inciso IX": "IX - intervenção para adequação do serviço público de energia elétrica;",
+    "Art. 5.  Inciso V": "V - obrigação de fazer;"
+};
+
+function abrirManual() {
+    const pagina = document.getElementById("paginaManual");
+    const dashboard = document.querySelector(".dashboard");
+    if (!pagina) return;
+
+    pagina.style.display = "block";
+    if (dashboard) dashboard.style.display = "none";
+    window.scrollTo(0, 0);
+
+    preencherTabelaArtigos();
+    preencherTabelaBase("");
+
+    // reset busca
+    const busca = document.getElementById("buscaManual");
+    if (busca) busca.value = "";
+}
+
+function fecharManual() {
+    const pagina = document.getElementById("paginaManual");
+    const dashboard = document.querySelector(".dashboard");
+    if (!pagina) return;
+
+    pagina.style.display = "none";
+    if (dashboard) dashboard.style.display = "";
+}
+
+function preencherTabelaArtigos() {
+    const tbody = document.getElementById("tbodyArtigos");
+    if (!tbody) return;
+
+    // Prioridade: dados do CSV (tem REN 63)
+    if (_dadosManualRegulatorio && _dadosManualRegulatorio.length > 0) {
+        tbody.innerHTML = _dadosManualRegulatorio.map(linha => `
+            <tr>
+                <td><span class="artigo-badge">${linha.artigo_846 || ""}</span></td>
+                <td>${MAPA_ARTIGO_DETALHE[normArtigo(linha.artigo_846)] || ""}</td>
+                <td><span class="artigo-badge">${linha.artigo_63 || ""}</span></td>
+                <td>${linha.descricao_63 || ""}</td>
+            </tr>
+        `).join("");
+        return;
+    }
+
+    // Fallback: MAPA_ARTIGO_EXIBICAO (sem REN 63)
+    const entradas = Object.entries(MAPA_ARTIGO_EXIBICAO)
+        .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"));
+
+    tbody.innerHTML = entradas.map(([artigo, descricao]) =>
+        `<tr>
+            <td><span class="artigo-badge">${artigo}</span></td>
+            <td>${descricao}</td>
+            <td></td>
+            <td></td>
+        </tr>`
+    ).join("");
+}
+
+function preencherTabelaBase(filtro) {
+    const tbody = document.getElementById("tbodyBase");
+    const contagem = document.getElementById("manual-contagem");
+    if (!tbody) return;
+
+    const termo = (filtro || "").toLowerCase().trim();
+
+    const registros = dados.filter(item => {
+        if (!termo) return true;
+        const texto = [
+            item.distribuidora, item.grupo, item.estado,
+            item.tema, item.tipoPenalidade, item.auto,
+            item.ano, ...(item.ncs || [])
+        ].join(" ").toLowerCase();
+        return texto.includes(termo);
+    });
+
+    if (contagem) {
+        contagem.textContent = `${registros.length.toLocaleString("pt-BR")} registros`;
+    }
+
+    const fmtValor = v =>
+        (v !== null && v !== undefined && v !== 0)
+            ? `<td class="valor-monetario">${formatarMoeda(v)}</td>`
+            : `<td class="valor-vazio">—</td>`;
+
+    const fmtNC = v =>
+        v ? `<td>${v}</td>` : `<td class="valor-vazio">—</td>`;
+
+    const exibir = registros.slice(0, 2000);
+
+    tbody.innerHTML = exibir.map(item => {
+        const ncs = item.ncs || [];
+        return `<tr>
+            <td>${item.distribuidora}</td>
+            <td>${item.grupo}</td>
+            <td>${item.estado}</td>
+            <td>${item.tema}</td>
+            <td>${item.tipoPenalidade}</td>
+            ${fmtValor(item.penalidade)}
+            ${fmtValor(item.multa)}
+            ${fmtValor(item.multaDiretoria)}
+            <td>${item.auto || "—"}</td>
+            <td>${item.ano || "—"}</td>
+            ${fmtNC(ncs[0])}
+            ${fmtNC(ncs[1])}
+            ${fmtNC(ncs[2])}
+            ${fmtNC(ncs[3])}
+            ${fmtNC(ncs[4])}
+        </tr>`;
+    }).join("");
+
+    if (registros.length > 2000) {
+        const aviso = document.createElement("tr");
+        aviso.innerHTML = `<td colspan="15" style="text-align:center;padding:14px;color:#64748b;font-size:12px;font-style:italic;">
+            Exibindo 2.000 de ${registros.length.toLocaleString("pt-BR")} registros. Use a busca para refinar.
+        </td>`;
+        tbody.appendChild(aviso);
+    }
+}
+
+// Vincula eventos do manual diretamente (sem DOMContentLoaded, pois o script roda após o HTML)
+(function inicializarManual() {
+    const btnManual = document.getElementById("btnManual");
+    if (btnManual) btnManual.addEventListener("click", abrirManual);
+
+    const btnVoltar = document.getElementById("btnVoltarManual");
+    if (btnVoltar) btnVoltar.addEventListener("click", fecharManual);
+
+    const buscaManual = document.getElementById("buscaManual");
+    if (buscaManual) {
+        let debounceTimer;
+        buscaManual.addEventListener("input", function () {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => preencherTabelaBase(this.value), 300);
+        });
+    }
+})();

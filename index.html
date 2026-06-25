@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Fiscalizações</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style2.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -43,6 +43,11 @@
 
     <div class="header-actions">
 
+        <button id="btnManual" class="btn-manual">
+            <i class="fa-solid fa-book-open"></i>
+            Manual de Dados
+        </button>
+
         <button id="btnDownload" class="btn-download">
             <i class="fa-solid fa-download"></i>
             Exportar Base
@@ -51,7 +56,7 @@
     </div>
 
 </header>
-
+</div>
 <!-- =========================
      PAINEL DE CONTROLE UNIFICADO
 ========================== -->
@@ -93,6 +98,21 @@
                 <select id="filtroPenalidade" multiple></select>
             </div>
 
+            <div class="filtro-item">
+                <label for="filtroEstado">Estado</label>
+                <select id="filtroEstado" multiple></select>
+            </div>
+
+            <div class="filtro-item">
+                <label for="filtroTema">Tema</label>
+                <select id="filtroTema" multiple></select>
+            </div>
+
+            <div class="filtro-item">
+                <label for="filtroNC">Não Conformidade</label>
+                <select id="filtroNC" multiple></select>
+            </div>
+
             <div class="filtro-item filtro-ano">
                 <label>Ano</label>
 
@@ -112,7 +132,8 @@
 
                 <div class="controle-esquerda">
 
-                    <div class="area-metrica">
+                    <div class="barra-controles-unificada">
+
                         <div class="toggle-metrica">
 
                             <button id="btnMetricaPenalidade" class="btn-metrica active">
@@ -128,18 +149,24 @@
                             </button>
 
                         </div>
-                    </div>
 
-                    <div class="area-botao">
+                        <div class="separador-vertical"></div>
 
                         <button id="btnVisao" class="btn-visao">
-                            <span class="icon">🔄</span>
-                            <span class="texto">Grupo</span>
+                            <span class="icon">🏢</span>
+                            <span class="texto">Distribuidora</span>
                         </button>
+
+                        <button id="btnVisaoNC" class="btn-visao">
+                            <span class="icon">📊</span>
+                            <span class="texto">Visão NC</span>
+                        </button>
+
+                        <div class="separador-vertical"></div>
 
                         <button id="btnLimpar" class="btn-limpar">
                             <i class="fa-solid fa-filter-circle-xmark"></i>
-                            <span>Limpar Filtros</span>
+                            <span>Limpar</span>
                         </button>
 
                     </div>
@@ -248,20 +275,82 @@
             </div>
 
             <div class="grafico-container">
-                <canvas id="graficoEstado"></canvas>
+                <div class="scroll-x">
+                    <div class="grafico-scroll" id="wrapperGraficoEstado">
+                        <canvas id="graficoEstado"></canvas>
+                    </div>
+                </div>
             </div>
 
         </div>
 
     </section>
 
+<!-- =========================
+     GRÁFICOS NC
+========================= -->
+<section id="secaoNC" class="graficos" style="display:none; margin-top:24px;">
+
+    <!-- HEADER VISÃO NC -->
+<div class="nc-section-header">
+    <div class="nc-section-header-left">
+        <span class="nc-badge"><i class="fa-solid fa-chart-column"></i> Não Conformidades</span>
+        <h2 class="nc-title">Visão Analítica de NC</h2>
+        <p class="nc-desc">Análise detalhada por tema e recorrência regulatória.</p>
+    </div>
+    <div class="nc-total-chip">
+        <span class="nc-total-label">Total de NCs</span>
+        <span class="nc-total-value" id="totalNC">0</span>
+    </div>
+</div>
+
+    <div class="graficos-grid">
+
+        <!-- NC EMPILHADO -->
+        <div class="grafico-container grafico-container-tema">
+
+            <div class="grafico-tema-body">
+
+                <div class="scroll-x grafico-tema-scroll">
+                    <div class="grafico-scroll" id="wrapperGraficoNCEmpilhado">
+                        <canvas id="graficoNCEmpilhado"></canvas>
+                    </div>
+                </div>
+
+                <div
+                    id="legendaNC"
+                    class="legenda-tema-custom">
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- NC BARRAS -->
+        <div class="grafico-container">
+
+            <div class="scroll-x">
+                <div class="grafico-scroll" id="wrapperGraficoNCBarra">
+                    <canvas id="graficoNCBarra"></canvas>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
     <!-- =========================
          TABELA
     ========================== -->
-    <section class="tabela-box">
+   <section class="tabela-box">
 
+    <div class="tabela-header" onclick="toggleTabela()">
         <h2>Detalhamento</h2>
-
+        <span id="iconeTabela">▼</span>
+    </div>
+    <div id="conteudoTabela" class="tabela-conteudo">
         <table id="tabelaDados">
             <thead>
                 <tr>
@@ -271,16 +360,111 @@
                     <th>Tema</th>
                     <th id="colPenalidade">Penalidade</th>
                     <th>Nº Auto</th>
+                    <th>Não Conformidades</th>
                 </tr>
             </thead>
             <tbody></tbody>
         </table>
+    </div>
 
     </section>
 
 </div>
 
-<script src="script.js"></script>
+<!-- =========================
+     PÁGINA: MANUAL DE DADOS
+========================== -->
+<div id="paginaManual" class="pagina-manual" style="display:none;">
+
+    <div class="manual-header">
+        <div class="manual-header-left">
+            <button id="btnVoltarManual" class="btn-voltar-manual">
+                <i class="fa-solid fa-arrow-left"></i>
+                Voltar ao Dashboard
+            </button>
+            <div class="manual-badge">
+                <i class="fa-solid fa-book-open"></i> Documentação
+            </div>
+            <h1 class="manual-titulo">Enquadramento das Não Conformidades dentro da REN 846/2019</h1>
+            <p class="manual-subtitulo">De-para entre os artigos regulatórios e suas respectivas descrições normativas.</p>
+        </div>
+    </div>
+
+    <div class="manual-corpo">
+
+        <!-- SEÇÃO 1: DE-PARA DE ARTIGOS -->
+        <section class="manual-secao">
+            <div class="manual-secao-header">
+                <i class="fa-solid fa-scale-balanced"></i>
+                <h2>Enquadramento regulatório — REN 846/2019</h2>
+            </div>
+            <div class="manual-secao-desc">
+                Correspondência entre os artigos da Resolução Normativa ANEEL nº 846/2019 e as descrições das infrações.
+            </div>
+            <div class="manual-tabela-wrapper">
+                <table class="manual-tabela" id="tabelaArtigos">
+                    <thead>
+                        <tr>
+                            <th style="width:220px">REN 846/2019</th>
+                            <th>Descrição REN 846/2019</th>
+                            <th style="width:220px">REN 63/2004</th>
+                            <th>Descrição REN 63/2004</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyArtigos"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- SEÇÃO 2: BASE COMPLETA -->
+        <section class="manual-secao">
+            <div class="manual-secao-header">
+                <i class="fa-solid fa-database"></i>
+                <h2>Base completa do relatório</h2>
+            </div>
+            <div class="manual-secao-desc">
+                Todos os registros carregados na base de dados do dashboard, antes de qualquer filtro.
+            </div>
+
+            <div class="manual-busca-row">
+                <div class="manual-busca-wrapper">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="buscaManual" placeholder="Buscar na base..." class="manual-busca-input">
+                </div>
+                <span id="manual-contagem" class="manual-contagem-badge">0 registros</span>
+            </div>
+
+            <div class="manual-tabela-wrapper manual-tabela-base-wrapper">
+                <table class="manual-tabela manual-tabela-base" id="tabelaBase">
+                    <thead>
+                        <tr>
+                            <th>Distribuidora</th>
+                            <th>Grupo</th>
+                            <th>Estado</th>
+                            <th>Tema</th>
+                            <th>Tipo Penalidade</th>
+                            <th>Penalidade (R$)</th>
+                            <th>Multa Pós-Juízo (R$)</th>
+                            <th>Multa Pós-Diretoria (R$)</th>
+                            <th>Nº Auto</th>
+                            <th>Ano</th>
+                            <th>NC 1</th>
+                            <th>NC 2</th>
+                            <th>NC 3</th>
+                            <th>NC 4</th>
+                            <th>NC 5</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyBase"></tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+</div>
+
+<script src="script2.js"></script>
 
 </body>
 </html>
