@@ -801,9 +801,7 @@ if (scroll) {
     const larguraPorBarra = 55;
     const larguraCalculada = labels.length * larguraPorBarra;
     const container = canvas.closest(".grafico-container");
-    const clientW = container ? container.clientWidth : 0;
-    // Fallback para quando o layout ainda não foi resolvido (mobile)
-    const larguraMinima = clientW > 0 ? clientW : Math.min(window.innerWidth - 48, 600);
+    const larguraMinima = container ? container.clientWidth : 0;
 
     scroll.style.width = Math.max(larguraCalculada, larguraMinima) + "px";
 }
@@ -1374,9 +1372,8 @@ if (scroll) {
     const container =
         canvas.closest(".grafico-container");
 
-    const clientW = container ? container.clientWidth : 0;
-    // Fallback para quando o layout ainda não foi resolvido (mobile)
-    const larguraMinima = clientW > 0 ? clientW : Math.min(window.innerWidth - 48, 600);
+    const larguraMinima =
+        container ? container.clientWidth : 0;
 
     scroll.style.width =
         Math.max(
@@ -2620,19 +2617,6 @@ function aplicarResizeObserver() {
 
 // Aplica ResizeObserver após dados carregados
 setTimeout(aplicarResizeObserver, 1000);
-
-// Fix mobile: força resize de todos os charts após layout estabilizar.
-// Em Samsung/Android com 5G o DOM async pode não ter resolvido clientWidth
-// no momento em que Papa.parse chama os construtores dos gráficos.
-function forcarResizeTodosGraficos() {
-    Object.keys(charts).forEach(id => {
-        if (charts[id]) {
-            try { charts[id].resize(); } catch(e) {}
-        }
-    });
-}
-setTimeout(forcarResizeTodosGraficos, 600);
-setTimeout(forcarResizeTodosGraficos, 1800);
 // =========================
 // MANUAL DE DADOS
 // =========================
