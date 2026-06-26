@@ -619,27 +619,32 @@ dadosFiltrados = baseFiltro
     );
 });
 
-       // atualizações
+       // atualizações não-visuais (cards, tabela) rodam imediatamente
 atualizarCards();
 atualizarCardNC();
 atualizarTabela();
-atualizarGraficos();
-atualizarGraficoEstado();
-atualizarGraficoRazaoUC();
-if (visaoNCAtiva) {
-    atualizarGraficosNC();
-}
+
+// Todos os gráficos são criados após o duplo rAF para garantir que o
+// layout flex já resolveu as dimensões antes do Chart.js inicializar.
+// Sem isso, o canvas recebe height:0 no mobile (Android/Samsung).
 requestAnimationFrame(() => {
 
     requestAnimationFrame(() => {
+        atualizarGraficos();
+        atualizarGraficoEstado();
+        atualizarGraficoRazaoUC();
         atualizarGraficoTema();
 
-        if (charts["graficoTema"]) {
-
-            charts["graficoTema"].resize();
-
-            charts["graficoTema"].update("none");
+        if (visaoNCAtiva) {
+            atualizarGraficosNC();
         }
+
+        // resize garante que charts criados com dimensão errada se corrijam
+        requestAnimationFrame(() => {
+            Object.keys(charts).forEach(id => {
+                try { if (charts[id]) charts[id].resize(); } catch(e) {}
+            });
+        });
     });
 });
         frameAtualizacao = null;
