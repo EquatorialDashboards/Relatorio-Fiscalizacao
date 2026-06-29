@@ -1448,9 +1448,8 @@ th, td {
 
     /* scroll-x ocupa o espaço restante e tem altura definida */
     .grafico-container .scroll-x {
-        flex: 1;
-        min-height: 0;
-        height: 100%;
+        flex: 1 1 auto;
+        min-height: 200px;
         -webkit-overflow-scrolling: touch;
     }
 
@@ -1464,8 +1463,7 @@ th, td {
 
     /* grafico-scroll precisa de altura para o canvas existir */
     .grafico-container .grafico-scroll {
-        height: 100%;
-        min-height: 240px;
+        min-height: 200px;
     }
 
     .grafico-container .grafico-scroll-y {
@@ -1474,9 +1472,7 @@ th, td {
 
     /* canvas respeita o wrapper */
     .grafico-container canvas {
-        max-width: 100%;
-        width: 100% !important;
-        height: 100% !important;
+          width: 100% !important;
     }
 
     /* gráfico de estado — agora usa scroll-x igual aos outros */

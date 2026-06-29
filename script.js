@@ -798,11 +798,6 @@ function atualizarLabelsAno() {
 // CRIAR GRÁFICO
 // =========================
 function criarGrafico(id, titulo, labels, valores) {
-
-    canvas.style.width = "1200px";
-    canvas.style.height = "400px";
-    canvas.width = 1200;
-    canvas.height = 400;
        const combinado = labels.map((l, i) => [l, valores[i]])
         .sort((a, b) => b[1] - a[1]);
 
@@ -842,7 +837,7 @@ if (scroll) {
         },
         plugins: [ChartDataLabels],
         options: {
-    responsive: false,
+    responsive: true,
     maintainAspectRatio: false,
     resizeDelay: 200,
 onClick: (evt, elements) => {
