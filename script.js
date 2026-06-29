@@ -2590,6 +2590,29 @@ if (btnNC) {
 // EXECUTA DIRETO (sem depender de evento)
 inicializarEventos();
 carregarDados();
+window.addEventListener("load", () => {
+
+    setTimeout(() => {
+
+        atualizarGraficos();
+        atualizarGraficoEstado();
+        atualizarGraficoRazaoUC();
+        atualizarGraficoTema();
+
+        if (visaoNCAtiva) {
+            atualizarGraficosNC();
+        }
+
+        Object.values(charts).forEach(chart => {
+            try {
+                chart.resize();
+                chart.update();
+            } catch(e){}
+        });
+
+    }, 1000);
+
+});
 carregarManualRegulatorio();
 
 // =========================
