@@ -640,11 +640,17 @@ requestAnimationFrame(() => {
         }
 
         // resize garante que charts criados com dimensão errada se corrijam
-        requestAnimationFrame(() => {
+     setTimeout(() => {
             Object.keys(charts).forEach(id => {
-                try { if (charts[id]) charts[id].resize(); } catch(e) {}
+                try {
+                    if (charts[id]) {
+                        charts[id].resize();
+                        charts[id].update('none');
+                    }
+                } catch(e) {}
             });
-        });
+
+        }, 300);
     });
 });
         frameAtualizacao = null;
