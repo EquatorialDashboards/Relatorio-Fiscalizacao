@@ -807,9 +807,7 @@ function criarGrafico(id, titulo, labels, valores) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
     const scroll = canvas.closest(".grafico-scroll");
-// TESTE MOBILE
-/*
-const scroll = canvas.closest(".grafico-scroll");
+
 if (scroll) {
     const larguraPorBarra = 55;
     const larguraCalculada = labels.length * larguraPorBarra;
@@ -818,8 +816,6 @@ if (scroll) {
 
     scroll.style.width = Math.max(larguraCalculada, larguraMinima) + "px";
 }
-}
-*/
 
     if (charts[id]) {
         charts[id].destroy();
