@@ -482,7 +482,68 @@ function getBaseComNC(lista) {
         item.ncs &&
         item.ncs.length > 0
     );
-}function aplicarFiltros() {
+}// =========================
+// FIX MOBILE: vigia que reconstrói gráficos com altura 0
+// O timing do bug de altura no Android é imprevisível (depende de quando
+// o navegador resolve a barra de rolagem/flex internamente), então em vez
+// de confiar em um cálculo único, verificamos de fato se cada canvas
+// renderizou com altura > 0 e, se não, reconstruímos aquele gráfico
+// específico. Tenta algumas vezes com atraso crescente.
+// =========================
+function verificarEReconstruirGraficosMobile(tentativa) {
+    if (window.innerWidth > 768) return;
+
+    tentativa = tentativa || 1;
+
+    const verificacoes = [
+        { id: "graficoDistribuidora", fn: atualizarGraficos },
+        { id: "graficoEstado", fn: atualizarGraficoEstado },
+        { id: "graficoRazaoUC", fn: atualizarGraficoRazaoUC },
+        { id: "graficoTema", fn: atualizarGraficoTema }
+    ];
+
+    if (visaoNCAtiva) {
+        verificacoes.push({ id: "graficoNCEmpilhado", fn: atualizarGraficosNC });
+    }
+
+    let precisaRetentar = false;
+    const jaReconstruido = new Set();
+
+    verificacoes.forEach(({ id, fn }) => {
+        const canvas = document.getElementById(id);
+        if (!canvas) return;
+
+        const alturaOk = canvas.offsetHeight > 10;
+
+        if (!alturaOk) {
+            precisaRetentar = true;
+
+            if (fn && !jaReconstruido.has(fn)) {
+                jaReconstruido.add(fn);
+                try { fn(); } catch (e) {}
+            }
+        }
+    });
+
+    if (precisaRetentar && tentativa < 6) {
+        setTimeout(() => {
+            verificarEReconstruirGraficosMobile(tentativa + 1);
+        }, 350 * tentativa);
+    }
+}
+
+// Reconstrói também ao primeiro toque/scroll no mobile, já que isso
+// historicamente força o navegador a recalcular o layout corretamente
+// (é o que faz o gráfico Tema "aparecer" ao clicar em Alternar).
+if (window.innerWidth <= 768) {
+    const aoPrimeiraInteracao = () => {
+        setTimeout(() => verificarEReconstruirGraficosMobile(), 50);
+    };
+    window.addEventListener("touchstart", aoPrimeiraInteracao, { once: true, passive: true });
+    window.addEventListener("scroll", aoPrimeiraInteracao, { once: true, passive: true });
+}
+
+function aplicarFiltros() {
 
     // evita múltiplas execuções no mesmo frame
     if (frameAtualizacao) {
@@ -649,6 +710,8 @@ requestAnimationFrame(() => {
                     }
                 } catch(e) {}
             });
+
+            verificarEReconstruirGraficosMobile();
 
         }, 300);
     });
@@ -2670,6 +2733,8 @@ window.addEventListener("load", () => {
                 chart.update();
             } catch(e){}
         });
+
+        verificarEReconstruirGraficosMobile();
 
     }, 1000);
 
