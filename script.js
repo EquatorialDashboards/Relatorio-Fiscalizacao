@@ -1519,6 +1519,10 @@ if (scroll) {
         }
     }
 });
+
+    requestAnimationFrame(() => {
+        if (charts["graficoRazaoUC"]) charts["graficoRazaoUC"].resize();
+    });
 }
 
 // =========================
@@ -1630,6 +1634,10 @@ function atualizarGraficoEstado() {
                 }
             }
         }
+    });
+
+    requestAnimationFrame(() => {
+        if (charts["graficoEstado"]) charts["graficoEstado"].resize();
     });
 }
 
