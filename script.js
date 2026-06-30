@@ -797,6 +797,39 @@ function atualizarLabelsAno() {
 // =========================
 // CRIAR GRÁFICO
 // =========================
+
+// FIX MOBILE: alguns navegadores Android não resolvem "height: 100%"
+// corretamente dentro de containers flex (mesmo com min-height definido,
+// pois min-height não conta como altura "especificada" para os filhos).
+// Esta função força altura em px lida do .grafico-container (que tem
+// altura fixa garantida no mobile via CSS), aplicando nos wrappers
+// intermediários antes de cada gráfico ser criado.
+function corrigirAlturaMobile(canvas) {
+    if (!canvas) return;
+    if (window.innerWidth > 768) return;
+
+    const container = canvas.closest(".grafico-container");
+    if (!container) return;
+
+    const containerH = container.clientHeight;
+    if (!containerH) return;
+
+    const header = container.querySelector(".grafico-header");
+    const headerH = header ? header.offsetHeight : 0;
+
+    const alturaDisponivel = Math.max(containerH - headerH - 24, 150);
+
+    let el = canvas.parentElement;
+    while (el && el !== container) {
+        // .grafico-scroll-y é o conteúdo interno do gráfico Tema (pode
+        // ser mais alto que o container para permitir scroll vertical)
+        if (!el.classList.contains("grafico-scroll-y")) {
+            el.style.height = alturaDisponivel + "px";
+        }
+        el = el.parentElement;
+    }
+}
+
 function criarGrafico(id, titulo, labels, valores) {
        const combinado = labels.map((l, i) => [l, valores[i]])
         .sort((a, b) => b[1] - a[1]);
@@ -821,6 +854,9 @@ if (scroll) {
         charts[id].destroy();
         delete charts[id];
     }
+
+    corrigirAlturaMobile(canvas);
+
     charts[id] = new Chart(canvas, {
         type: "bar",
         data: {
@@ -1105,6 +1141,8 @@ if (visaoNCAtiva) {
             scrollY.style.height = "100%";
         }
     }
+
+    corrigirAlturaMobile(canvas);
 
     charts["graficoTema"] = new Chart(canvas, {
 
@@ -1398,6 +1436,8 @@ if (scroll) {
         delete charts["graficoRazaoUC"];
     }
 
+    corrigirAlturaMobile(canvas);
+
    charts["graficoRazaoUC"] = new Chart(canvas, {
     plugins: [ChartDataLabels],
     data: {
@@ -1595,6 +1635,9 @@ function atualizarGraficoEstado() {
         charts["graficoEstado"].destroy();
         delete charts["graficoEstado"];
     }
+
+    corrigirAlturaMobile(canvas);
+
     charts["graficoEstado"] = new Chart(canvas, {
         type: "bar",
         data: {
@@ -1764,6 +1807,8 @@ const labelsOrdenados = Object.keys(agrupado)
 
         delete charts["graficoNCEmpilhado"];
     }
+
+    corrigirAlturaMobile(canvas);
 
     charts["graficoNCEmpilhado"] =
         new Chart(canvas, {
@@ -1963,6 +2008,8 @@ function atualizarGraficoNCBarra() {
 
         delete charts["graficoNCBarra"];
     }
+
+    corrigirAlturaMobile(canvas);
 
     charts["graficoNCBarra"] =
         new Chart(canvas, {

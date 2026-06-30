@@ -1466,16 +1466,6 @@ th, td {
         min-height: 200px;
     }
 
-    /* gráfico Tema: mesma cadeia precisa de altura mínima fixa,
-       senão o canvas colapsa igual aos outros no Android */
-    .grafico-container .grafico-tema-body {
-        min-height: 200px;
-    }
-
-    .grafico-container .grafico-tema-scroll {
-        min-height: 200px;
-    }
-
     .grafico-container .grafico-scroll-y {
         min-height: 240px;
     }
