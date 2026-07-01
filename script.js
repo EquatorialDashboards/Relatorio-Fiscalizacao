@@ -490,6 +490,67 @@ function getBaseComNC(lista) {
 // renderizou com altura > 0 e, se não, reconstruímos aquele gráfico
 // específico. Tenta algumas vezes com atraso crescente.
 // =========================
+// =========================
+// DEBUG TEMPORÁRIO MOBILE — remover depois de diagnosticar
+// Mostra na tela a altura real de cada container/canvas para
+// pararmos de adivinhar e vermos o número exato.
+// =========================
+function debugAlturasMobile() {
+    if (window.innerWidth > 768) return;
+
+    const alvos = [
+        "graficoRazaoUC",
+        "graficoDistribuidora",
+        "graficoGrupo",
+        "graficoTema",
+        "graficoEstado",
+        "graficoNCEmpilhado",
+        "graficoNCBarra"
+    ];
+
+    let painel = document.getElementById("painelDebugAltura");
+    if (!painel) {
+        painel = document.createElement("div");
+        painel.id = "painelDebugAltura";
+        painel.style.cssText =
+            "position:fixed;bottom:0;left:0;right:0;z-index:99999;" +
+            "background:rgba(0,0,0,0.85);color:#0f0;font:11px monospace;" +
+            "padding:8px;max-height:40vh;overflow:auto;white-space:pre-line;";
+        document.body.appendChild(painel);
+    }
+
+    let texto = "DEBUG ALTURAS (px)\n";
+
+    alvos.forEach(id => {
+        const canvas = document.getElementById(id);
+        if (!canvas) {
+            texto += id + ": não existe no DOM\n";
+            return;
+        }
+        const container = canvas.closest(".grafico-container");
+        let linha = id + ": canvas=" + canvas.offsetHeight;
+        if (container) {
+            linha += " container=" + container.offsetHeight;
+        }
+        let el = canvas.parentElement;
+        const partes = [];
+        while (el && el !== container) {
+            partes.push(el.className + "=" + el.offsetHeight);
+            el = el.parentElement;
+        }
+        if (partes.length) linha += " | " + partes.reverse().join(" > ");
+        texto += linha + "\n";
+    });
+
+    painel.textContent = texto;
+}
+
+window.addEventListener("load", () => {
+    setTimeout(debugAlturasMobile, 1500);
+    setTimeout(debugAlturasMobile, 3000);
+});
+window.addEventListener("touchstart", () => setTimeout(debugAlturasMobile, 300), { passive: true });
+
 function verificarEReconstruirGraficosMobile(tentativa) {
     if (window.innerWidth > 768) return;
 
@@ -917,8 +978,6 @@ if (scroll) {
         charts[id].destroy();
         delete charts[id];
     }
-
-    corrigirAlturaMobile(canvas);
 
     charts[id] = new Chart(canvas, {
         type: "bar",
