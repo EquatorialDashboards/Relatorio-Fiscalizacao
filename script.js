@@ -2665,16 +2665,11 @@ inicializarEventos();
 carregarDados();
 window.addEventListener("load", () => {
 
+    // Apenas redimensiona gráficos JÁ criados (não recria) — a criação
+    // inicial agora acontece de forma sincronizada dentro do carregarDados,
+    // logo após dados + layout estarem prontos. Recriar aqui de novo causava
+    // duas instâncias de Chart.js no mesmo canvas ("Canvas is already in use").
     setTimeout(() => {
-
-        atualizarGraficos();
-        atualizarGraficoEstado();
-        atualizarGraficoRazaoUC();
-        atualizarGraficoTema();
-
-        if (visaoNCAtiva) {
-            atualizarGraficosNC();
-        }
 
         Object.values(charts).forEach(chart => {
             try {
