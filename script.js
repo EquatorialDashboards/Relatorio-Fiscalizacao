@@ -393,24 +393,9 @@ ncs: ncs
             preencherFiltros();
             iniciarMultiselect();
             inicializarSliderAno();
-
-            // FIX: gráficos só são criados depois que o layout da página
-            // (fontes, CSS, imagens) terminou de se resolver — antes disso
-            // o Chart.js pode medir um container com tamanho incorreto e
-            // desenhar vazio, especialmente no mobile quando o CSV chega
-            // rápido e "ganha a corrida" do evento window.load.
-            const criarGraficosIniciais = () => {
-                inicializacaoCompleta = true;
-                aplicarFiltros();
-                atualizarBotoesVisao();
-                atualizarBotaoVisao();
-            };
-
-            if (document.readyState === "complete") {
-                criarGraficosIniciais();
-            } else {
-                window.addEventListener("load", criarGraficosIniciais, { once: true });
-            }
+            aplicarFiltros();
+            atualizarBotoesVisao();
+            atualizarBotaoVisao();
         },
         error: function (erro) {
             console.error("Erro ao carregar CSV:", erro);
@@ -497,52 +482,7 @@ function getBaseComNC(lista) {
         item.ncs &&
         item.ncs.length > 0
     );
-}// =========================
-// FIX MOBILE: vigia que reconstrói gráficos com altura 0
-// O timing do bug de altura no Android é imprevisível (depende de quando
-// =========================
-// DEBUG TEMPORÁRIO: badge de erro discreto (não bloqueia cliques,
-// não reconstrói nada — só mostra se algo real estiver quebrando)
-// =========================
-(function () {
-    const erros = [];
-    let badge = null;
-
-    function mostrar() {
-        if (!badge) {
-            badge = document.createElement("div");
-            badge.style.cssText =
-                "position:fixed;top:4px;right:4px;z-index:99999;" +
-                "background:rgba(200,0,0,0.9);color:#fff;font:10px monospace;" +
-                "padding:4px 6px;border-radius:4px;max-width:90vw;" +
-                "max-height:30vh;overflow:auto;pointer-events:none;white-space:pre-wrap;";
-            document.body.appendChild(badge);
-        }
-        badge.textContent = "ERROS JS (" + erros.length + "):\n" + erros.slice(-5).join("\n---\n");
-    }
-
-    window.addEventListener("error", (e) => {
-        const msg = e.message + " @ " + (e.filename || "?") + ":" + e.lineno + ":" + e.colno +
-            (e.error && e.error.stack ? "\n" + e.error.stack.split("\n").slice(0, 3).join("\n") : "");
-        erros.push(msg);
-        mostrar();
-    });
-
-    window.addEventListener("unhandledrejection", (e) => {
-        erros.push("PROMISE: " + (e.reason && e.reason.message ? e.reason.message : e.reason));
-        mostrar();
-    });
-})();
-
-// FIX: nenhuma chamada de aplicarFiltros() cria gráficos até a
-// inicialização (dados + layout + widgets de filtro) estar
-// completamente pronta. Isso elimina qualquer corrida vinda de eventos
-// "change" sintéticos disparados por bibliotecas de terceiros (Choices.js,
-// sliders, etc.) durante a própria configuração inicial.
-let inicializacaoCompleta = false;
-
-function aplicarFiltros() {
-    if (!inicializacaoCompleta) return;
+}function aplicarFiltros() {
 
     // evita múltiplas execuções no mesmo frame
     if (frameAtualizacao) {
@@ -700,17 +640,18 @@ requestAnimationFrame(() => {
         }
 
         // resize garante que charts criados com dimensão errada se corrijam
-     setTimeout(() => {
-            Object.keys(charts).forEach(id => {
-                try {
-                    if (charts[id]) {
-                        charts[id].resize();
-                        charts[id].update('none');
-                    }
-                } catch(e) {}
-            });
+setTimeout(() => {
 
-        }, 300);
+    Object.keys(charts).forEach(id => {
+        try {
+            if (charts[id]) {
+                charts[id].resize();
+                charts[id].update('none');
+            }
+        } catch(e) {}
+    });
+
+}, 300);
     });
 });
         frameAtualizacao = null;
@@ -857,7 +798,6 @@ function atualizarLabelsAno() {
 // =========================
 // CRIAR GRÁFICO
 // =========================
-
 function criarGrafico(id, titulo, labels, valores) {
        const combinado = labels.map((l, i) => [l, valores[i]])
         .sort((a, b) => b[1] - a[1]);
@@ -882,7 +822,6 @@ if (scroll) {
         charts[id].destroy();
         delete charts[id];
     }
-
     charts[id] = new Chart(canvas, {
         type: "bar",
         data: {
@@ -897,7 +836,10 @@ if (scroll) {
     cursor: "pointer"
 }]
         },
-        plugins: [ChartDataLabels],
+        // FIX MOBILE: só ativa o plugin de rótulos se houver dados —
+        // com dataset vazio o ChartDataLabels lança
+        // "Cannot read properties of undefined (reading 'length')" (Samsung Browser)
+        plugins: labels.length ? [ChartDataLabels] : [],
         options: {
     responsive: true,
     maintainAspectRatio: false,
@@ -1167,7 +1109,6 @@ if (visaoNCAtiva) {
             scrollY.style.height = "100%";
         }
     }
-
 
     charts["graficoTema"] = new Chart(canvas, {
 
@@ -1461,9 +1402,9 @@ if (scroll) {
         delete charts["graficoRazaoUC"];
     }
 
-
    charts["graficoRazaoUC"] = new Chart(canvas, {
-    plugins: [ChartDataLabels],
+    // FIX MOBILE: evita erro do ChartDataLabels quando não há dados após filtro
+    plugins: labels.length ? [ChartDataLabels] : [],
     data: {
         labels: labels,
         datasets: [
@@ -1583,10 +1524,6 @@ if (scroll) {
         }
     }
 });
-
-    requestAnimationFrame(() => {
-        if (charts["graficoRazaoUC"]) charts["graficoRazaoUC"].resize();
-    });
 }
 
 // =========================
@@ -1659,8 +1596,6 @@ function atualizarGraficoEstado() {
         charts["graficoEstado"].destroy();
         delete charts["graficoEstado"];
     }
-
-
     charts["graficoEstado"] = new Chart(canvas, {
         type: "bar",
         data: {
@@ -1700,10 +1635,6 @@ function atualizarGraficoEstado() {
                 }
             }
         }
-    });
-
-    requestAnimationFrame(() => {
-        if (charts["graficoEstado"]) charts["graficoEstado"].resize();
     });
 }
 
@@ -1831,12 +1762,12 @@ const labelsOrdenados = Object.keys(agrupado)
         delete charts["graficoNCEmpilhado"];
     }
 
-
     charts["graficoNCEmpilhado"] =
         new Chart(canvas, {
 
             type: "bar",
-            plugins: [ChartDataLabels],
+            // FIX MOBILE: evita erro do ChartDataLabels quando não há dados após filtro
+            plugins: labels.length ? [ChartDataLabels] : [],
             data: {
                 labels,
                 datasets
@@ -2031,7 +1962,6 @@ function atualizarGraficoNCBarra() {
         delete charts["graficoNCBarra"];
     }
 
-
     charts["graficoNCBarra"] =
         new Chart(canvas, {
 
@@ -2058,7 +1988,8 @@ function atualizarGraficoNCBarra() {
                 }]
             },
 
-            plugins: [ChartDataLabels],
+            // FIX MOBILE: evita erro do ChartDataLabels quando não há dados após filtro
+            plugins: labels.length ? [ChartDataLabels] : [],
 
             options: {
 
@@ -2672,24 +2603,11 @@ if (btnNC) {
 // EXECUTA DIRETO (sem depender de evento)
 inicializarEventos();
 carregarDados();
-window.addEventListener("load", () => {
-
-    // Apenas redimensiona gráficos JÁ criados (não recria) — a criação
-    // inicial agora acontece de forma sincronizada dentro do carregarDados,
-    // logo após dados + layout estarem prontos. Recriar aqui de novo causava
-    // duas instâncias de Chart.js no mesmo canvas ("Canvas is already in use").
-    setTimeout(() => {
-
-        Object.values(charts).forEach(chart => {
-            try {
-                chart.resize();
-                chart.update();
-            } catch(e){}
-        });
-
-    }, 1000);
-
-});
+// FIX MOBILE: o listener de "load" que recriava todos os gráficos 1s
+// depois foi removido — ele duplicava o trabalho já feito dentro de
+// aplicarFiltros()/carregarDados() (que já usa duplo requestAnimationFrame
+// + correção de resize em 300ms) e causava a corrida "Canvas is already
+// in use" quando o carregamento do CSV demorava mais que 1s no celular.
 carregarManualRegulatorio();
 
 // =========================
@@ -2702,16 +2620,38 @@ function aplicarResizeObserver() {
     document.querySelectorAll(".grafico-container").forEach(container => {
         if (container._resizeObserver) return;
 
-        const observer = new ResizeObserver(() => {
-            container.querySelectorAll("canvas").forEach(canvas => {
-                const id = canvas.id;
-                if (charts[id]) {
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            if (charts[id]) charts[id].resize();
-                        });
+        // FIX MOBILE: guarda a última largura/altura observada e um flag de
+        // "resize em andamento". Sem isso, chart.resize() pode alterar o
+        // layout do container o suficiente para o próprio ResizeObserver
+        // disparar de novo, criando um loop de resize (consumo de CPU/bateria
+        // e "piscar" dos gráficos, comum em Android/Samsung Internet).
+        let ultimaLargura = 0;
+        let ultimaAltura = 0;
+        let resizePendente = false;
+
+        const observer = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (!entry) return;
+
+            const { width, height } = entry.contentRect;
+            const mudouSignificativamente =
+                Math.abs(width - ultimaLargura) > 2 ||
+                Math.abs(height - ultimaAltura) > 2;
+
+            if (!mudouSignificativamente || resizePendente) return;
+
+            ultimaLargura = width;
+            ultimaAltura = height;
+            resizePendente = true;
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    container.querySelectorAll("canvas").forEach(canvas => {
+                        const id = canvas.id;
+                        if (charts[id]) charts[id].resize();
                     });
-                }
+                    resizePendente = false;
+                });
             });
         });
 

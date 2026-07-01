@@ -445,12 +445,15 @@ body {
 }
 
 .grafico-container canvas {
+    /* FIX MOBILE: height:100% + flex:1 no mesmo elemento entram em conflito
+       de cálculo de layout em navegadores mobile (Android/Samsung Internet),
+       fazendo o canvas nascer com altura 0. O Chart.js já calcula a altura
+       via resize()/ResizeObserver usando a altura do wrapper .grafico-scroll,
+       então não é preciso forçar aqui. */
     width: 100% !important;
-    height: 100% !important;
-    max-height: 100%; 
+    max-width: 100%;
     display: block;
     position: relative;
-    flex: 1;          
 }
 
 .grafico-header {
@@ -463,7 +466,9 @@ body {
 .scroll-x {
     overflow-x: auto;
     overflow-y: hidden;
-    flex: 1;                
+    flex: 1;
+    min-height: 0; /* FIX MOBILE: mesma proteção do .scroll-y, evita que o item
+                       flex ignore a altura do container em navegadores mobile */
 }
 
 /* Scroll vertical para gráfico de temas */
