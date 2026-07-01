@@ -492,9 +492,19 @@ function getBaseComNC(lista) {
 // =========================
 // =========================
 // DEBUG TEMPORÁRIO MOBILE — remover depois de diagnosticar
-// Mostra na tela a altura real de cada container/canvas para
-// pararmos de adivinhar e vermos o número exato.
+// Captura erros JS reais que possam estar interrompendo a criação
+// dos gráficos silenciosamente no mobile.
 // =========================
+window._errosDebugMobile = [];
+window.addEventListener("error", (e) => {
+    window._errosDebugMobile.push(
+        "ERRO: " + e.message + " (" + (e.filename || "").split("/").pop() + ":" + e.lineno + ")"
+    );
+});
+window.addEventListener("unhandledrejection", (e) => {
+    window._errosDebugMobile.push("PROMISE REJEITADA: " + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
+
 function debugAlturasMobile() {
     if (window.innerWidth > 768) return;
 
@@ -528,19 +538,22 @@ function debugAlturasMobile() {
             return;
         }
         const container = canvas.closest(".grafico-container");
-        let linha = id + ": canvas=" + canvas.offsetHeight;
+        const instancia = charts[id] || (typeof Chart !== "undefined" && Chart.getChart ? Chart.getChart(canvas) : null);
+        let linha = id + ": canvas(dom)=" + canvas.offsetHeight +
+            " canvas(bitmap)=" + canvas.width + "x" + canvas.height +
+            " chartInstance=" + (instancia ? "SIM" : "NÃO");
         if (container) {
             linha += " container=" + container.offsetHeight;
         }
-        let el = canvas.parentElement;
-        const partes = [];
-        while (el && el !== container) {
-            partes.push(el.className + "=" + el.offsetHeight);
-            el = el.parentElement;
-        }
-        if (partes.length) linha += " | " + partes.reverse().join(" > ");
         texto += linha + "\n";
     });
+
+    if (window._errosDebugMobile.length) {
+        texto += "\n--- ERROS CAPTURADOS ---\n";
+        texto += window._errosDebugMobile.join("\n");
+    } else {
+        texto += "\n(nenhum erro JS capturado até agora)";
+    }
 
     painel.textContent = texto;
 }
