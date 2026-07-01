@@ -393,9 +393,23 @@ ncs: ncs
             preencherFiltros();
             iniciarMultiselect();
             inicializarSliderAno();
-            aplicarFiltros();
-            atualizarBotoesVisao();
-            atualizarBotaoVisao();
+
+            // FIX: gráficos só são criados depois que o layout da página
+            // (fontes, CSS, imagens) terminou de se resolver — antes disso
+            // o Chart.js pode medir um container com tamanho incorreto e
+            // desenhar vazio, especialmente no mobile quando o CSV chega
+            // rápido e "ganha a corrida" do evento window.load.
+            const criarGraficosIniciais = () => {
+                aplicarFiltros();
+                atualizarBotoesVisao();
+                atualizarBotaoVisao();
+            };
+
+            if (document.readyState === "complete") {
+                criarGraficosIniciais();
+            } else {
+                window.addEventListener("load", criarGraficosIniciais, { once: true });
+            }
         },
         error: function (erro) {
             console.error("Erro ao carregar CSV:", erro);
@@ -485,137 +499,39 @@ function getBaseComNC(lista) {
 }// =========================
 // FIX MOBILE: vigia que reconstrói gráficos com altura 0
 // O timing do bug de altura no Android é imprevisível (depende de quando
-// o navegador resolve a barra de rolagem/flex internamente), então em vez
-// de confiar em um cálculo único, verificamos de fato se cada canvas
-// renderizou com altura > 0 e, se não, reconstruímos aquele gráfico
-// específico. Tenta algumas vezes com atraso crescente.
 // =========================
+// DEBUG TEMPORÁRIO: badge de erro discreto (não bloqueia cliques,
+// não reconstrói nada — só mostra se algo real estiver quebrando)
 // =========================
-// DEBUG TEMPORÁRIO MOBILE — remover depois de diagnosticar
-// Captura erros JS reais que possam estar interrompendo a criação
-// dos gráficos silenciosamente no mobile.
-// =========================
-window._errosDebugMobile = [];
-window.addEventListener("error", (e) => {
-    window._errosDebugMobile.push(
-        "ERRO: " + e.message + " (" + (e.filename || "").split("/").pop() + ":" + e.lineno + ")"
-    );
-});
-window.addEventListener("unhandledrejection", (e) => {
-    window._errosDebugMobile.push("PROMISE REJEITADA: " + (e.reason && e.reason.message ? e.reason.message : e.reason));
-});
+(function () {
+    const erros = [];
+    let badge = null;
 
-function debugAlturasMobile() {
-    if (window.innerWidth > 768) return;
-
-    const alvos = [
-        "graficoRazaoUC",
-        "graficoDistribuidora",
-        "graficoGrupo",
-        "graficoTema",
-        "graficoEstado",
-        "graficoNCEmpilhado",
-        "graficoNCBarra"
-    ];
-
-    let painel = document.getElementById("painelDebugAltura");
-    if (!painel) {
-        painel = document.createElement("div");
-        painel.id = "painelDebugAltura";
-        painel.style.cssText =
-            "position:fixed;bottom:0;left:0;right:0;z-index:99999;" +
-            "background:rgba(0,0,0,0.85);color:#0f0;font:11px monospace;" +
-            "padding:8px;max-height:40vh;overflow:auto;white-space:pre-line;";
-        document.body.appendChild(painel);
+    function mostrar() {
+        if (!badge) {
+            badge = document.createElement("div");
+            badge.style.cssText =
+                "position:fixed;top:4px;right:4px;z-index:99999;" +
+                "background:rgba(200,0,0,0.9);color:#fff;font:10px monospace;" +
+                "padding:4px 6px;border-radius:4px;max-width:90vw;" +
+                "max-height:30vh;overflow:auto;pointer-events:none;white-space:pre-wrap;";
+            document.body.appendChild(badge);
+        }
+        badge.textContent = "ERROS JS (" + erros.length + "):\n" + erros.slice(-5).join("\n---\n");
     }
 
-    let texto = "DEBUG ALTURAS (px)\n";
-
-    alvos.forEach(id => {
-        const canvas = document.getElementById(id);
-        if (!canvas) {
-            texto += id + ": não existe no DOM\n";
-            return;
-        }
-        const container = canvas.closest(".grafico-container");
-        const instancia = charts[id] || (typeof Chart !== "undefined" && Chart.getChart ? Chart.getChart(canvas) : null);
-        let linha = id + ": canvas(dom)=" + canvas.offsetHeight +
-            " canvas(bitmap)=" + canvas.width + "x" + canvas.height +
-            " chartInstance=" + (instancia ? "SIM" : "NÃO");
-        if (container) {
-            linha += " container=" + container.offsetHeight;
-        }
-        texto += linha + "\n";
+    window.addEventListener("error", (e) => {
+        const msg = e.message + " @ " + (e.filename || "?") + ":" + e.lineno + ":" + e.colno +
+            (e.error && e.error.stack ? "\n" + e.error.stack.split("\n").slice(0, 3).join("\n") : "");
+        erros.push(msg);
+        mostrar();
     });
 
-    if (window._errosDebugMobile.length) {
-        texto += "\n--- ERROS CAPTURADOS ---\n";
-        texto += window._errosDebugMobile.join("\n");
-    } else {
-        texto += "\n(nenhum erro JS capturado até agora)";
-    }
-
-    painel.textContent = texto;
-}
-
-window.addEventListener("load", () => {
-    setTimeout(debugAlturasMobile, 1500);
-    setTimeout(debugAlturasMobile, 3000);
-});
-window.addEventListener("touchstart", () => setTimeout(debugAlturasMobile, 300), { passive: true });
-
-function verificarEReconstruirGraficosMobile(tentativa) {
-    if (window.innerWidth > 768) return;
-
-    tentativa = tentativa || 1;
-
-    const verificacoes = [
-        { id: "graficoDistribuidora", fn: atualizarGraficos },
-        { id: "graficoEstado", fn: atualizarGraficoEstado },
-        { id: "graficoRazaoUC", fn: atualizarGraficoRazaoUC },
-        { id: "graficoTema", fn: atualizarGraficoTema }
-    ];
-
-    if (visaoNCAtiva) {
-        verificacoes.push({ id: "graficoNCEmpilhado", fn: atualizarGraficosNC });
-    }
-
-    let precisaRetentar = false;
-    const jaReconstruido = new Set();
-
-    verificacoes.forEach(({ id, fn }) => {
-        const canvas = document.getElementById(id);
-        if (!canvas) return;
-
-        const alturaOk = canvas.offsetHeight > 10;
-
-        if (!alturaOk) {
-            precisaRetentar = true;
-
-            if (fn && !jaReconstruido.has(fn)) {
-                jaReconstruido.add(fn);
-                try { fn(); } catch (e) {}
-            }
-        }
+    window.addEventListener("unhandledrejection", (e) => {
+        erros.push("PROMISE: " + (e.reason && e.reason.message ? e.reason.message : e.reason));
+        mostrar();
     });
-
-    if (precisaRetentar && tentativa < 6) {
-        setTimeout(() => {
-            verificarEReconstruirGraficosMobile(tentativa + 1);
-        }, 350 * tentativa);
-    }
-}
-
-// Reconstrói também ao primeiro toque/scroll no mobile, já que isso
-// historicamente força o navegador a recalcular o layout corretamente
-// (é o que faz o gráfico Tema "aparecer" ao clicar em Alternar).
-if (window.innerWidth <= 768) {
-    const aoPrimeiraInteracao = () => {
-        setTimeout(() => verificarEReconstruirGraficosMobile(), 50);
-    };
-    window.addEventListener("touchstart", aoPrimeiraInteracao, { once: true, passive: true });
-    window.addEventListener("scroll", aoPrimeiraInteracao, { once: true, passive: true });
-}
+})();
 
 function aplicarFiltros() {
 
@@ -785,8 +701,6 @@ requestAnimationFrame(() => {
                 } catch(e) {}
             });
 
-            verificarEReconstruirGraficosMobile();
-
         }, 300);
     });
 });
@@ -934,38 +848,6 @@ function atualizarLabelsAno() {
 // =========================
 // CRIAR GRÁFICO
 // =========================
-
-// FIX MOBILE: alguns navegadores Android não resolvem "height: 100%"
-// corretamente dentro de containers flex (mesmo com min-height definido,
-// pois min-height não conta como altura "especificada" para os filhos).
-// Esta função força altura em px lida do .grafico-container (que tem
-// altura fixa garantida no mobile via CSS), aplicando nos wrappers
-// intermediários antes de cada gráfico ser criado.
-function corrigirAlturaMobile(canvas) {
-    if (!canvas) return;
-    if (window.innerWidth > 768) return;
-
-    const container = canvas.closest(".grafico-container");
-    if (!container) return;
-
-    const containerH = container.clientHeight;
-    if (!containerH) return;
-
-    const header = container.querySelector(".grafico-header");
-    const headerH = header ? header.offsetHeight : 0;
-
-    const alturaDisponivel = Math.max(containerH - headerH - 24, 150);
-
-    let el = canvas.parentElement;
-    while (el && el !== container) {
-        // .grafico-scroll-y é o conteúdo interno do gráfico Tema (pode
-        // ser mais alto que o container para permitir scroll vertical)
-        if (!el.classList.contains("grafico-scroll-y")) {
-            el.style.height = alturaDisponivel + "px";
-        }
-        el = el.parentElement;
-    }
-}
 
 function criarGrafico(id, titulo, labels, valores) {
        const combinado = labels.map((l, i) => [l, valores[i]])
@@ -1277,7 +1159,6 @@ if (visaoNCAtiva) {
         }
     }
 
-    corrigirAlturaMobile(canvas);
 
     charts["graficoTema"] = new Chart(canvas, {
 
@@ -1571,7 +1452,6 @@ if (scroll) {
         delete charts["graficoRazaoUC"];
     }
 
-    corrigirAlturaMobile(canvas);
 
    charts["graficoRazaoUC"] = new Chart(canvas, {
     plugins: [ChartDataLabels],
@@ -1771,7 +1651,6 @@ function atualizarGraficoEstado() {
         delete charts["graficoEstado"];
     }
 
-    corrigirAlturaMobile(canvas);
 
     charts["graficoEstado"] = new Chart(canvas, {
         type: "bar",
@@ -1943,7 +1822,6 @@ const labelsOrdenados = Object.keys(agrupado)
         delete charts["graficoNCEmpilhado"];
     }
 
-    corrigirAlturaMobile(canvas);
 
     charts["graficoNCEmpilhado"] =
         new Chart(canvas, {
@@ -2144,7 +2022,6 @@ function atualizarGraficoNCBarra() {
         delete charts["graficoNCBarra"];
     }
 
-    corrigirAlturaMobile(canvas);
 
     charts["graficoNCBarra"] =
         new Chart(canvas, {
@@ -2805,8 +2682,6 @@ window.addEventListener("load", () => {
                 chart.update();
             } catch(e){}
         });
-
-        verificarEReconstruirGraficosMobile();
 
     }, 1000);
 
