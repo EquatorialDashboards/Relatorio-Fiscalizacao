@@ -400,6 +400,7 @@ ncs: ncs
             // desenhar vazio, especialmente no mobile quando o CSV chega
             // rápido e "ganha a corrida" do evento window.load.
             const criarGraficosIniciais = () => {
+                inicializacaoCompleta = true;
                 aplicarFiltros();
                 atualizarBotoesVisao();
                 atualizarBotaoVisao();
@@ -533,7 +534,15 @@ function getBaseComNC(lista) {
     });
 })();
 
+// FIX: nenhuma chamada de aplicarFiltros() cria gráficos até a
+// inicialização (dados + layout + widgets de filtro) estar
+// completamente pronta. Isso elimina qualquer corrida vinda de eventos
+// "change" sintéticos disparados por bibliotecas de terceiros (Choices.js,
+// sliders, etc.) durante a própria configuração inicial.
+let inicializacaoCompleta = false;
+
 function aplicarFiltros() {
+    if (!inicializacaoCompleta) return;
 
     // evita múltiplas execuções no mesmo frame
     if (frameAtualizacao) {
