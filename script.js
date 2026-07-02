@@ -24,16 +24,6 @@ let tabelaOculta = false;
 // ambos vêm de duas criações de gráfico rodando ao mesmo tempo no mesmo id.
 let filtroExecucaoId = 0;
 
-// FIX DEFINITIVO 2 — fila de execução única.
-// Antes, mesmo com a checagem de execId, duas chamadas ainda PODIAM cair no
-// mesmo requestAnimationFrame e executar uma logo depois da outra sem
-// nenhuma barreira física entre elas. Agora, todo o bloco que cria os
-// gráficos passa a rodar dentro desta fila baseada em Promise: cada
-// execução só começa depois que a anterior terminou por completo. Isso não
-// é mais uma "checagem que pode falhar" — é impossível, por construção,
-// duas criações de gráfico rodarem sobrepostas.
-let filaGraficos = Promise.resolve();
-
 // =========================
 // FIX DEFINITIVO — "Canvas is already in use"
 // Antes de QUALQUER `new Chart(canvas, ...)`, esta função pergunta ao
@@ -51,47 +41,6 @@ function destruirGraficoDoCanvas(canvas) {
         if (existente) existente.destroy();
     } catch (e) {
         console.warn("Erro ao destruir gráfico existente no canvas", canvas?.id, e);
-    }
-}
-
-// =========================
-// FIX DEFINITIVO — dimensões reais garantidas para TODOS os gráficos
-// Mesmo princípio já aplicado no gráfico Tema, generalizado: no mobile o
-// flexbox às vezes ainda não terminou de calcular a altura/largura do
-// wrapper no exato momento em que o Chart.js é criado, e o canvas nasce
-// com 0px numa das dimensões (o gráfico "existe" mas não aparece).
-// Esta função MEDE o wrapper logo antes da criação; se a medida vier
-// suspeita (menor que um mínimo razoável), força um valor em pixel lido
-// do container pai — que tem altura fixa garantida via CSS, não depende
-// de flex-grow terminar de calcular. Se a medida já estiver normal, não
-// mexe em nada (não força pixels desnecessariamente).
-function garantirDimensoesReais(canvas, alturaMinima = 180) {
-    if (!canvas) return;
-    const wrapper = canvas.parentElement;
-    if (!wrapper) return;
-
-    const container = canvas.closest(".grafico-container");
-
-    // FIX: getBoundingClientRect() força o navegador a resolver o layout
-    // pendente antes de responder. clientHeight/clientWidth às vezes ainda
-    // retornam 0 durante um reflow em andamento (bug clássico em
-    // Chrome/WebView Android) — getBoundingClientRect() é mais confiável
-    // exatamente nesse cenário.
-    const rectWrapper = wrapper.getBoundingClientRect();
-    const rectContainer = container
-        ? container.getBoundingClientRect()
-        : null;
-
-    const alturaContainer = rectContainer ? rectContainer.height : 0;
-    const larguraContainer = rectContainer ? rectContainer.width : 0;
-
-    if (rectWrapper.height < alturaMinima) {
-        wrapper.style.height =
-            Math.max(alturaContainer - 24, alturaMinima) + "px";
-    }
-
-    if (rectWrapper.width < 100 && larguraContainer > 0) {
-        wrapper.style.minWidth = larguraContainer + "px";
     }
 }
 
@@ -716,55 +665,35 @@ requestAnimationFrame(() => {
 
     requestAnimationFrame(() => {
 
-        // FIX DEFINITIVO: encadeia esta execução na fila única. Enquanto
-        // uma execução anterior não terminar, esta espera — fisicamente
-        // impossível rodar duas ao mesmo tempo.
-        filaGraficos = filaGraficos.then(() => {
+        // FIX RACE CONDITION: se outra chamada de aplicarFiltros() começou
+        // depois desta, aborta — evita duas criações de gráfico ao mesmo
+        // tempo no mesmo canvas ("Canvas is already in use").
+        if (execId !== filtroExecucaoId) return;
 
-            // se outra chamada de aplicarFiltros() começou depois desta,
-            // não vale mais a pena criar os gráficos — pula direto
-            if (execId !== filtroExecucaoId) return;
+        atualizarGraficos();
+        atualizarGraficoEstado();
+        atualizarGraficoRazaoUC();
+        atualizarGraficoTema();
 
-            // FIX EXTRA (bug clássico Chrome Android): mesmo depois do
-            // duplo rAF acima, ainda existe uma janela onde o navegador
-            // registrou o layout mas não terminou de aplicá-lo de fato no
-            // canvas no momento em que o Chart.js é instanciado. Esta
-            // espera de mais um frame, imediatamente antes da criação real,
-            // reduz essa janela ao mínimo possível.
-            return new Promise(resolve => requestAnimationFrame(resolve))
-                .then(() => {
+        if (visaoNCAtiva) {
+            atualizarGraficosNC();
+        }
 
-                if (execId !== filtroExecucaoId) return;
+        // resize garante que charts criados com dimensão errada se corrijam
+setTimeout(() => {
 
-                atualizarGraficos();
-                atualizarGraficoEstado();
-                atualizarGraficoRazaoUC();
-                atualizarGraficoTema();
+    if (execId !== filtroExecucaoId) return;
 
-                if (visaoNCAtiva) {
-                    atualizarGraficosNC();
-                }
+    Object.keys(charts).forEach(id => {
+        try {
+            if (charts[id]) {
+                charts[id].resize();
+                charts[id].update('none');
+            }
+        } catch(e) {}
+    });
 
-                // resize garante que charts criados com dimensão errada se corrijam
-                return new Promise(resolve => {
-                    setTimeout(() => {
-                        if (execId === filtroExecucaoId) {
-                            Object.keys(charts).forEach(id => {
-                                try {
-                                    if (charts[id]) {
-                                        charts[id].resize();
-                                        charts[id].update('none');
-                                    }
-                                } catch (e) {}
-                            });
-                        }
-                        resolve();
-                }, 300);
-            });
-            });
-        }).catch(e => {
-            console.error("Erro na fila de criação de gráficos:", e);
-        });
+}, 300);
     });
 });
         frameAtualizacao = null;
@@ -935,7 +864,6 @@ if (scroll) {
         try { charts[id].destroy(); } catch(e) { console.warn("Erro ao destruir gráfico", id, e); }
         delete charts[id];
     }
-    garantirDimensoesReais(canvas); // FIX DEFINITIVO 3
     destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
     charts[id] = new Chart(canvas, {
         type: "bar",
@@ -1213,33 +1141,6 @@ if (visaoNCAtiva) {
     const scrollY = canvas.closest(".grafico-scroll-y");
 
     if (scrollY) {
-
-        // FIX: a altura já era forçada em pixel via JS, mas a largura nunca
-        // era — ficava só por conta do flexbox, que no mobile pode ainda
-        // não ter resolvido a largura real no momento da criação do
-        // gráfico. Isso afeta especialmente o modo "tema" (indexAxis:'y',
-        // barras horizontais), que depende mais da largura pra se desenhar
-        // do que os modos "ano"/"temaAno" (barras verticais). Lemos a
-        // largura real do container pai (que já tem largura garantida por
-        // CSS grid, não por flex-grow) e fixamos em pixel, tirando essa
-        // dependência do timing do flexbox.
-        // FIX: getBoundingClientRect() é mais confiável que clientWidth
-        // durante um reflow em andamento (mesmo motivo do garantirDimensoesReais).
-        const elemLargura =
-            canvas.closest(".grafico-tema-body") ||
-            canvas.closest(".grafico-container");
-        const containerLargura =
-            elemLargura ? elemLargura.getBoundingClientRect().width : 0;
-
-        const legendaVisivel =
-            document.getElementById("legendaTema")?.style.display === "block";
-
-        const larguraDisponivel = Math.max(
-            containerLargura - (legendaVisivel ? 190 : 0),
-            280
-        );
-
-        scrollY.style.width = larguraDisponivel + "px";
 
         if (isTema) {
 
@@ -1551,7 +1452,6 @@ if (scroll) {
         delete charts["graficoRazaoUC"];
     }
 
-   garantirDimensoesReais(canvas); // FIX DEFINITIVO 3
    destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
    charts["graficoRazaoUC"] = new Chart(canvas, {
     // FIX MOBILE: evita erro do ChartDataLabels quando não há dados após filtro
@@ -1713,14 +1613,7 @@ function alternarGraficoTema() {
         modoGraficoTema = "tema";
     }
 
-    // FIX DEFINITIVO: passa pela mesma fila usada por aplicarFiltros,
-    // pra nunca rodar ao mesmo tempo que uma criação de gráfico em curso.
-    // + rAF extra antes da criação real (mesmo motivo do bloco em aplicarFiltros).
-    filaGraficos = filaGraficos
-        .then(() => new Promise(resolve => requestAnimationFrame(resolve)))
-        .then(() => {
-            atualizarGraficoTema();
-        }).catch(e => console.error("Erro ao alternar gráfico Tema:", e));
+    atualizarGraficoTema();
 }
 
 function atualizarGraficoEstado() {
@@ -1754,7 +1647,6 @@ function atualizarGraficoEstado() {
         try { charts["graficoEstado"].destroy(); } catch(e) { console.warn("Erro ao destruir gráfico", "graficoEstado", e); }
         delete charts["graficoEstado"];
     }
-    garantirDimensoesReais(canvas); // FIX DEFINITIVO 3
     destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
     charts["graficoEstado"] = new Chart(canvas, {
         type: "bar",
@@ -1921,7 +1813,6 @@ const labelsOrdenados = Object.keys(agrupado)
         delete charts["graficoNCEmpilhado"];
     }
 
-    garantirDimensoesReais(canvas); // FIX DEFINITIVO 3
     destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
     charts["graficoNCEmpilhado"] =
         new Chart(canvas, {
@@ -2122,7 +2013,6 @@ function atualizarGraficoNCBarra() {
         delete charts["graficoNCBarra"];
     }
 
-    garantirDimensoesReais(canvas); // FIX DEFINITIVO 3
     destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
     charts["graficoNCBarra"] =
         new Chart(canvas, {
