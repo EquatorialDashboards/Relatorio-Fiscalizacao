@@ -11,6 +11,38 @@ let filtroGrafico = {
 };
 let frameAtualizacao = null;
 let tabelaOculta = false;
+// FIX RACE CONDITION: token incremental. Cada chamada de aplicarFiltros()
+// recebe um número. Antes de efetivamente criar/recriar os gráficos
+// (depois dos requestAnimationFrame), cada execução confere se ainda é a
+// mais recente. Se enquanto isso outra chamada começou (ex: usuário tocou
+// em dois filtros rápido, ou o Choices.js disparou "change" mais de uma
+// vez no mobile — muito comum em multiselect touch), a execução antiga é
+// abortada em vez de tentar criar o Chart.js em cima de um canvas que a
+// execução nova já está destruindo/recriando ao mesmo tempo.
+// Isso é a causa real do erro "Canvas is already in use" e do erro do
+// ChartDataLabels ("Cannot read properties of undefined") reportados —
+// ambos vêm de duas criações de gráfico rodando ao mesmo tempo no mesmo id.
+let filtroExecucaoId = 0;
+
+// =========================
+// FIX DEFINITIVO — "Canvas is already in use"
+// Antes de QUALQUER `new Chart(canvas, ...)`, esta função pergunta ao
+// PRÓPRIO Chart.js (não à nossa variável `charts{}`) se já existe um
+// gráfico associado a esse canvas, e destrói. Chart.js mantém seu próprio
+// registro interno (Chart.getChart) — é a fonte da verdade real. Depender
+// só da nossa cópia (`charts[id]`) é frágil: se ela ficar dessincronizada
+// por qualquer motivo (corrida entre chamadas, exceção no meio do caminho,
+// etc.) o erro "Canvas is already in use" volta. Consultando o Chart.js
+// diretamente, o erro se torna estruturalmente impossível.
+function destruirGraficoDoCanvas(canvas) {
+    if (!canvas) return;
+    try {
+        const existente = Chart.getChart(canvas);
+        if (existente) existente.destroy();
+    } catch (e) {
+        console.warn("Erro ao destruir gráfico existente no canvas", canvas?.id, e);
+    }
+}
 
 function normArtigo(s) {
     return String(s || "")
@@ -489,6 +521,9 @@ function getBaseComNC(lista) {
         cancelAnimationFrame(frameAtualizacao);
     }
 
+    // marca esta chamada como a mais recente
+    const execId = ++filtroExecucaoId;
+
     frameAtualizacao = requestAnimationFrame(() => {
 
         function getValoresSelecionados(selectId) {
@@ -551,8 +586,7 @@ function getBaseComNC(lista) {
 
         if (charts[id]) {
 
-            charts[id].destroy();
-
+            try { charts[id].destroy(); } catch(e) { console.warn("Erro ao destruir gráfico", id, e); }
             delete charts[id];
         }
     });
@@ -630,6 +664,12 @@ atualizarTabela();
 requestAnimationFrame(() => {
 
     requestAnimationFrame(() => {
+
+        // FIX RACE CONDITION: se outra chamada de aplicarFiltros() começou
+        // depois desta, aborta — evita duas criações de gráfico ao mesmo
+        // tempo no mesmo canvas ("Canvas is already in use").
+        if (execId !== filtroExecucaoId) return;
+
         atualizarGraficos();
         atualizarGraficoEstado();
         atualizarGraficoRazaoUC();
@@ -641,6 +681,8 @@ requestAnimationFrame(() => {
 
         // resize garante que charts criados com dimensão errada se corrijam
 setTimeout(() => {
+
+    if (execId !== filtroExecucaoId) return;
 
     Object.keys(charts).forEach(id => {
         try {
@@ -819,9 +861,10 @@ if (scroll) {
 }
 
     if (charts[id]) {
-        charts[id].destroy();
+        try { charts[id].destroy(); } catch(e) { console.warn("Erro ao destruir gráfico", id, e); }
         delete charts[id];
     }
+    destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
     charts[id] = new Chart(canvas, {
         type: "bar",
         data: {
@@ -1085,7 +1128,7 @@ if (visaoNCAtiva) {
 
     // DESTROI ANTES
     if (charts["graficoTema"]) {
-        charts["graficoTema"].destroy();
+        try { charts["graficoTema"].destroy(); } catch(e) { console.warn("Erro ao destruir gráfico", "graficoTema", e); }
         delete charts["graficoTema"];
     }
 
@@ -1110,9 +1153,16 @@ if (visaoNCAtiva) {
         }
     }
 
+    destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
     charts["graficoTema"] = new Chart(canvas, {
 
         type: "bar",
+
+        // FIX: o plugin ChartDataLabels nunca era registrado aqui —
+        // só a configuração (options.plugins.datalabels) existia, então
+        // os rótulos nunca eram desenhados. Também evita erro do plugin
+        // quando o dataset fica vazio após um filtro.
+        plugins: labels.length ? [ChartDataLabels] : [],
 
         data: {
             labels,
@@ -1398,10 +1448,11 @@ if (scroll) {
 }
 
     if (charts["graficoRazaoUC"]) {
-        charts["graficoRazaoUC"].destroy();
+        try { charts["graficoRazaoUC"].destroy(); } catch(e) { console.warn("Erro ao destruir gráfico", "graficoRazaoUC", e); }
         delete charts["graficoRazaoUC"];
     }
 
+   destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
    charts["graficoRazaoUC"] = new Chart(canvas, {
     // FIX MOBILE: evita erro do ChartDataLabels quando não há dados após filtro
     plugins: labels.length ? [ChartDataLabels] : [],
@@ -1593,9 +1644,10 @@ function atualizarGraficoEstado() {
     const valores = ordenado.map(x => x[1]);
 
     if (charts["graficoEstado"]) {
-        charts["graficoEstado"].destroy();
+        try { charts["graficoEstado"].destroy(); } catch(e) { console.warn("Erro ao destruir gráfico", "graficoEstado", e); }
         delete charts["graficoEstado"];
     }
+    destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
     charts["graficoEstado"] = new Chart(canvas, {
         type: "bar",
         data: {
@@ -1757,11 +1809,11 @@ const labelsOrdenados = Object.keys(agrupado)
 
     if (charts["graficoNCEmpilhado"]) {
 
-        charts["graficoNCEmpilhado"].destroy();
-
+        try { charts["graficoNCEmpilhado"].destroy(); } catch(e) { console.warn("Erro ao destruir gráfico", "graficoNCEmpilhado", e); }
         delete charts["graficoNCEmpilhado"];
     }
 
+    destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
     charts["graficoNCEmpilhado"] =
         new Chart(canvas, {
 
@@ -1957,11 +2009,11 @@ function atualizarGraficoNCBarra() {
 
     if (charts["graficoNCBarra"]) {
 
-        charts["graficoNCBarra"].destroy();
-
+        try { charts["graficoNCBarra"].destroy(); } catch(e) { console.warn("Erro ao destruir gráfico", "graficoNCBarra", e); }
         delete charts["graficoNCBarra"];
     }
 
+    destruirGraficoDoCanvas(canvas); // FIX DEFINITIVO
     charts["graficoNCBarra"] =
         new Chart(canvas, {
 
@@ -2453,7 +2505,7 @@ function alternarMetrica(tipo) {
     }
 
     Object.keys(charts).forEach(id => {
-        charts[id].destroy();
+        try { charts[id].destroy(); } catch(e) { console.warn("Erro ao destruir gráfico", id, e); }
         delete charts[id];
     });
 
@@ -2611,57 +2663,18 @@ carregarDados();
 carregarManualRegulatorio();
 
 // =========================
-// FIX MOBILE: ResizeObserver nos containers de gráfico
-// Garante que Chart.js redimensiona corretamente após filtros no mobile
-// =========================
-function aplicarResizeObserver() {
-    if (typeof ResizeObserver === "undefined") return;
-
-    document.querySelectorAll(".grafico-container").forEach(container => {
-        if (container._resizeObserver) return;
-
-        // FIX MOBILE: guarda a última largura/altura observada e um flag de
-        // "resize em andamento". Sem isso, chart.resize() pode alterar o
-        // layout do container o suficiente para o próprio ResizeObserver
-        // disparar de novo, criando um loop de resize (consumo de CPU/bateria
-        // e "piscar" dos gráficos, comum em Android/Samsung Internet).
-        let ultimaLargura = 0;
-        let ultimaAltura = 0;
-        let resizePendente = false;
-
-        const observer = new ResizeObserver((entries) => {
-            const entry = entries[0];
-            if (!entry) return;
-
-            const { width, height } = entry.contentRect;
-            const mudouSignificativamente =
-                Math.abs(width - ultimaLargura) > 2 ||
-                Math.abs(height - ultimaAltura) > 2;
-
-            if (!mudouSignificativamente || resizePendente) return;
-
-            ultimaLargura = width;
-            ultimaAltura = height;
-            resizePendente = true;
-
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    container.querySelectorAll("canvas").forEach(canvas => {
-                        const id = canvas.id;
-                        if (charts[id]) charts[id].resize();
-                    });
-                    resizePendente = false;
-                });
-            });
-        });
-
-        observer.observe(container);
-        container._resizeObserver = observer;
-    });
-}
-
-// Aplica ResizeObserver após dados carregados
-setTimeout(aplicarResizeObserver, 1000);
+// FIX MOBILE: ResizeObserver customizado REMOVIDO.
+// Chart.js (v3+) já usa um ResizeObserver interno próprio para redimensionar
+// o canvas automaticamente quando o container muda de tamanho (rotação de
+// tela, resize da janela, etc). Ter DOIS observers redimensionando o mesmo
+// canvas em momentos diferentes fazia o buffer interno do canvas (resolução
+// real de desenho) ficar dessincronizado do tamanho visual em CSS — isso
+// produz exatamente o sintoma relatado: gráfico "esticado/distorcido" após
+// girar a tela, e cliques que não acertam a barra certa (o clique é
+// calculado com base na resolução interna do canvas, que estava errada).
+// Basta o .grafico-container e seus filhos terem altura real (não-flex,
+// não-porcentagem instável) — o que já garantimos no CSS — para o
+// mecanismo nativo do Chart.js funcionar sozinho, sem hacks.
 // =========================
 // MANUAL DE DADOS
 // =========================
