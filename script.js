@@ -472,11 +472,15 @@ ncs: ncs
             if (btn) {
             btn.addEventListener("click", alternarVisao);
             }
-
             preencherFiltros();
             iniciarMultiselect();
             inicializarSliderAno();
-            aplicarFiltros();
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    aplicarFiltros();
+                });
+            });
             atualizarBotoesVisao();
             atualizarBotaoVisao();
         },
@@ -660,7 +664,6 @@ dadosFiltrados = baseFiltro
         };
     })
     .filter(item => {
-``
 
     return (
         (distribuidoras.length === 0 ||
