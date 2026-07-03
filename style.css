@@ -783,7 +783,16 @@ th, td {
 
 /* Container do gráfico de tema com legenda lateral */
 .grafico-container-tema {
-    overflow: visible;
+    /* FIX: estava "visible", diferente de todo o resto do dashboard
+       (que usa "hidden" em .grafico-container). Quando o modo "tema"
+       tem muitas categorias, o JS aumenta a altura do conteúdo interno
+       (.grafico-scroll-y) via labels.length * 34px — com overflow
+       visible, esse conteúdo extra vazava pra fora da caixa de altura
+       fixa (420px) e cobria visualmente os gráficos ao lado no grid.
+       O scroll interno (.scroll-y, com overflow-y:auto) já existe
+       justamente pra lidar com esse excesso — só precisava que o
+       container parasse de deixar vazar por cima dele.             */
+    overflow: hidden;
 }
 
 /* Flex row: gráfico + legenda */

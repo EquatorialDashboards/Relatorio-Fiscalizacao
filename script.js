@@ -985,7 +985,12 @@ if (scroll) {
     const larguraPorBarra = 55;
     const larguraCalculada = labels.length * larguraPorBarra;
     const container = canvas.closest(".grafico-container");
-    const larguraMinima = container ? container.clientWidth : 0;
+    // FIX: clientWidth pode retornar 0 durante um reflow em andamento no
+    // mobile (mesmo bug já tratado em garantirDimensoesReais).
+    // getBoundingClientRect() força a resolução do layout antes de medir.
+    const larguraMinima = container
+        ? container.getBoundingClientRect().width
+        : 0;
 
     scroll.style.width = Math.max(larguraCalculada, larguraMinima) + "px";
 }
@@ -1133,19 +1138,23 @@ function atualizarGraficos() {
         tituloGrafico = "Multa Pós-Diretoria";
     }
 
-    criarGrafico(
-        "graficoDistribuidora",
-        tituloGrafico,
-        grafPenalidade.map(x => x[0]),
-        grafPenalidade.map(x => x[1])
-    );
+    executarComIsolamento(() => {
+        criarGrafico(
+            "graficoDistribuidora",
+            tituloGrafico,
+            grafPenalidade.map(x => x[0]),
+            grafPenalidade.map(x => x[1])
+        );
+    }, "graficoDistribuidora");
 
-    criarGrafico(
-        "graficoGrupo",
-        "Fiscalizações",
-        grafAutos.map(x => x[0]),
-        grafAutos.map(x => x[1])
-    );
+    executarComIsolamento(() => {
+        criarGrafico(
+            "graficoGrupo",
+            "Fiscalizações",
+            grafAutos.map(x => x[0]),
+            grafAutos.map(x => x[1])
+        );
+    }, "graficoGrupo (Fiscalizações)");
 }
 // =========================
 // GRÁFICO TEMA DINÂMICO
