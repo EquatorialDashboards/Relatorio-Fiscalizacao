@@ -11,6 +11,21 @@ let filtroGrafico = {
 };
 let frameAtualizacao = null;
 let tabelaOculta = false;
+// FIX MOBILE: debounce real na ENTRADA de aplicarFiltros().
+// Antes, cada chamada de aplicarFiltros() virava uma tarefa própria na
+// fila (filaGraficos), mesmo que disparada a poucos milissegundos de
+// distância de outra (ex: Choices.js disparando "change" sintético em 6
+// selects durante a inicialização, ou touch disparando "change" duas
+// vezes no mesmo toque). Isso empilhava várias execuções completas em
+// série (~300ms+ cada, por causa do resize no final), e a tela só
+// terminava de refletir o filtro mais recente depois que TODA a fila
+// represada tivesse rodado — no mobile isso podia levar segundos, dando a
+// impressão de que "só funciona depois de clicar em algum botão" (o clique
+// era só mais uma chamada empilhada por cima, não a causa real).
+// Este timer agrupa rajadas de chamadas próximas em uma única execução,
+// ANTES de qualquer trabalho começar — diferente do antigo mecanismo de
+// execId, que cancelava trabalho já em andamento.
+let debounceFiltrosId = null;
 // FIX RACE CONDITION: token incremental. Cada chamada de aplicarFiltros()
 // recebe um número. Antes de efetivamente criar/recriar os gráficos
 // (depois dos requestAnimationFrame), cada execução confere se ainda é a
@@ -65,7 +80,7 @@ function destruirGraficoDoCanvas(canvas) {
 // do container pai — que tem altura fixa garantida via CSS, não depende
 // de flex-grow terminar de calcular. Se a medida já estiver normal, não
 // mexe em nada (não força pixels desnecessariamente).
-function garantirDimensoesReais(canvas, alturaMinima = 180) {
+function garantirDimensoesReais(canvas, alturaMinima = 180, larguraMinima = 280) {
     if (!canvas) return;
     const wrapper = canvas.parentElement;
     if (!wrapper) return;
@@ -90,10 +105,37 @@ function garantirDimensoesReais(canvas, alturaMinima = 180) {
             Math.max(alturaContainer - 24, alturaMinima) + "px";
     }
 
-    if (rectWrapper.width < 100 && larguraContainer > 0) {
-        wrapper.style.minWidth = larguraContainer + "px";
+    // FIX DEFINITIVO 4: antes, esta correção só rodava se o container-pai
+    // já tivesse alguma largura (larguraContainer > 0). No pior caso do
+    // mobile — logo na primeira carga da página, antes do flexbox terminar
+    // de resolver — o wrapper E o container podem estar com largura ZERO
+    // ao mesmo tempo, e a correção não fazia nada. O canvas nascia com
+    // largura 0, e o Chart.js/ChartDataLabels lançava exceção ao tentar
+    // desenhar — o que interrompia TODA a sequência de criação dos
+    // gráficos daquela chamada (inclusive os gráficos seguintes, que nunca
+    // chegavam a rodar). Agora, igual ao que já era feito manualmente só
+    // para o gráfico Tema, sempre garantimos um mínimo de pixels mesmo que
+    // o container também esteja zerado.
+    if (rectWrapper.width < 100) {
+        wrapper.style.minWidth =
+            Math.max(larguraContainer, larguraMinima) + "px";
     }
 }
+
+// FIX DEFINITIVO 4b: isolamento entre gráficos. Antes, se qualquer um dos
+// gráficos desta lista lançasse uma exceção (ex: canvas com dimensão
+// inválida), TODOS os que viriam depois dele na mesma chamada ficavam sem
+// rodar — o erro interrompia a função inteira no meio, silenciosamente
+// (só aparecia no console). Agora cada gráfico roda isolado: um erro em
+// um não impede os outros de aparecer.
+function executarComIsolamento(fn, nome) {
+    try {
+        fn();
+    } catch (e) {
+        console.error("Erro ao atualizar gráfico:", nome, e);
+    }
+}
+
 
 function normArtigo(s) {
     return String(s || "")
@@ -565,7 +607,22 @@ function getBaseComNC(lista) {
         item.ncs &&
         item.ncs.length > 0
     );
-}function aplicarFiltros() {
+}
+
+function aplicarFiltros() {
+    // FIX MOBILE: debounce de entrada — agrupa chamadas disparadas em
+    // rajada (ex: inicialização do Choices.js, "change" duplicado por
+    // touch) em uma única execução real, evitando empilhar tarefas na fila.
+    if (debounceFiltrosId) {
+        clearTimeout(debounceFiltrosId);
+    }
+    debounceFiltrosId = setTimeout(() => {
+        debounceFiltrosId = null;
+        executarAplicarFiltros();
+    }, 80);
+}
+
+function executarAplicarFiltros() {
 
     // evita múltiplas execuções no mesmo frame
     if (frameAtualizacao) {
@@ -573,7 +630,7 @@ function getBaseComNC(lista) {
     }
 
     // marca esta chamada (apenas para diagnóstico/telemetria futura;
-    // não é mais usada para descartar trabalho — ver nota abaixo)
+    // não é mais usada para descartar trabalho)
     const execId = ++filtroExecucaoId;
 
     frameAtualizacao = requestAnimationFrame(() => {
@@ -740,13 +797,13 @@ requestAnimationFrame(() => {
             return new Promise(resolve => requestAnimationFrame(resolve))
                 .then(() => {
 
-                atualizarGraficos();
-                atualizarGraficoEstado();
-                atualizarGraficoRazaoUC();
-                atualizarGraficoTema();
+                executarComIsolamento(atualizarGraficos, "graficoDistribuidora");
+                executarComIsolamento(atualizarGraficoEstado, "graficoEstado");
+                executarComIsolamento(atualizarGraficoRazaoUC, "graficoRazaoUC");
+                executarComIsolamento(atualizarGraficoTema, "graficoTema");
 
                 if (visaoNCAtiva) {
-                    atualizarGraficosNC();
+                    executarComIsolamento(atualizarGraficosNC, "graficosNC");
                 }
 
                 // resize garante que charts criados com dimensão errada se corrijam
@@ -2782,13 +2839,13 @@ window.addEventListener("load", () => {
         .then(() => new Promise(resolve => setTimeout(resolve, 300)))
         .then(() => new Promise(resolve => requestAnimationFrame(resolve)))
         .then(() => {
-            atualizarGraficos();
-            atualizarGraficoEstado();
-            atualizarGraficoRazaoUC();
-            atualizarGraficoTema();
+            executarComIsolamento(atualizarGraficos, "graficoDistribuidora");
+            executarComIsolamento(atualizarGraficoEstado, "graficoEstado");
+            executarComIsolamento(atualizarGraficoRazaoUC, "graficoRazaoUC");
+            executarComIsolamento(atualizarGraficoTema, "graficoTema");
 
             if (visaoNCAtiva) {
-                atualizarGraficosNC();
+                executarComIsolamento(atualizarGraficosNC, "graficosNC");
             }
 
             Object.keys(charts).forEach(id => {
