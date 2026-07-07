@@ -518,7 +518,7 @@ ncs: ncs
             preencherFiltros();
             iniciarMultiselect();
             inicializarSliderAno();
-            aplicarFiltros();
+            aguardarLayoutEstavel(aplicarFiltros);
             atualizarBotoesVisao();
             atualizarBotaoVisao();
         },
@@ -532,6 +532,51 @@ ncs: ncs
 // =========================
 // FILTROS
 // =========================
+// FIX MOBILE — PRIMEIRA CARGA: os fixes existentes (duplo rAF, setTimeout)
+// estimam por TEMPO quando o layout terminou. Na maioria dos casos funciona,
+// mas em conexões/CPUs mais lentas o layout do CSS Grid pode ainda não ter
+// se estabelecido no momento estimado — e como graficoGrupo é o segundo
+// canvas a ser desenhado na mesma leva, é o que mais aparece afetado.
+// Esta função espera o navegador CONFIRMAR (via ResizeObserver) que o grid
+// já tem dimensão real antes de chamar o callback, em vez de estimar por
+// tempo. Só é usada na primeira renderização (fim do carregamento do CSV);
+// o resto do pipeline (aplicarFiltros em filtros/cliques) continua igual.
+function aguardarLayoutEstavel(callback) {
+    const alvo = document.querySelector(".graficos-grid");
+
+    if (!alvo || typeof ResizeObserver === "undefined") {
+        callback();
+        return;
+    }
+
+    let jaChamou = false;
+
+    const observer = new ResizeObserver(entries => {
+        for (const entry of entries) {
+            if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+                if (!jaChamou) {
+                    jaChamou = true;
+                    observer.disconnect();
+                    callback();
+                }
+                return;
+            }
+        }
+    });
+
+    observer.observe(alvo);
+
+    // Fallback: se por algum motivo o ResizeObserver nunca confirmar
+    // dimensão real, não deixa a tela sem gráficos indefinidamente.
+    setTimeout(() => {
+        if (!jaChamou) {
+            jaChamou = true;
+            observer.disconnect();
+            callback();
+        }
+    }, 1500);
+}
+
 function preencherFiltros() {
 
     preencherSelect(
@@ -896,7 +941,7 @@ document.getElementById("tituloPenalidade").textContent =
 function atualizarCardNC() {
     const el = document.getElementById("totalNC");
     if (!el) return;
-    const base = getBaseComNC(dadosFiltrados);
+    const base = getBaseComNC(dadosFiltrados).filter(isRegistroValido);
     let total = 0;
     base.forEach(item => { total += getNcsFiltradas(item).length; });
     el.textContent = total.toLocaleString("pt-BR");
@@ -1299,8 +1344,12 @@ if (visaoNCAtiva) {
         const containerLargura =
             elemLargura ? elemLargura.getBoundingClientRect().width : 0;
 
-        const legendaVisivel =
-            document.getElementById("legendaTema")?.style.display === "block";
+        // FIX: antes lia o display atual de #legendaTema, mas esse valor só é
+        // atualizado por renderLegendaTema() mais abaixo — nesse ponto ele
+        // ainda reflete o modo ANTERIOR, não o que está sendo montado agora.
+        // A legenda só aparece no modo "temaAno" (ver renderLegendaTema logo
+        // abaixo), então usamos isEmpilhado diretamente, sem depender do DOM.
+        const legendaVisivel = isEmpilhado;
 
         const larguraDisponivel = Math.max(
             containerLargura - (legendaVisivel ? 190 : 0),
@@ -1911,6 +1960,7 @@ function atualizarGraficoNCEmpilhado() {
     const tiposNC = new Set();
 
     const baseNC = dadosFiltrados.filter(item =>
+    isRegistroValido(item) &&
     getNcsFiltradas(item).length > 0
 );
 
@@ -2145,6 +2195,7 @@ function atualizarGraficoNCBarra() {
     const agrupado = {};
 
     const baseNC = dadosFiltrados.filter(item =>
+    isRegistroValido(item) &&
     getNcsFiltradas(item).length > 0);
 
     // AGRUPA POR NC
